@@ -1,0 +1,19 @@
+version: '3'
+services:
+
+  database:
+    image: "postgres:10.6" 
+    ports: 
+      - 5432:5432
+    environment: 
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: admin
+      POSTGRES_DB: test
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
+    command: postgres -c wal_level=logical
+
+volumes:
+    database-data: # named volumes can be managed easier using docker-compose

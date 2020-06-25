@@ -2,9 +2,12 @@ import sys
 import psycopg2
 from psycopg2.extras import LogicalReplicationConnection
 import decoders
+import uuid
+from datetime import datetime
+from pypgoutput import decoders
 
 conn = psycopg2.connect(
-    'host=localhost user=admin port=5432 dbname=test password=test',
+    'host=localhost user=test port=5432 dbname=test password=test',
     connection_factory=psycopg2.extras.LogicalReplicationConnection)
 cur = conn.cursor()
 replication_options = {
@@ -23,41 +26,21 @@ except psycopg2.ProgrammingError:
         options=replication_options)
 
 
+
+def write_raw_test_file(lsn, message_type, payload, parent_dir="./test/files"):
+    file_name = f"{uuid.uuid4()}"
+    with open(f"{parent_dir}/{lsn}_{message_type.lower()}_{file_name}", 'wb') as f:
+        f.write(payload)
+
+
 class LogicalStreamConsumer(object):
     def __call__(self, msg):
-        #print(msg.payload)
-    
-        # TODO: add some kind of processing here
         first_byte = (msg.payload[:1]).decode('utf-8')
-
-        if first_byte == 'B':
-            output = decoders.Begin(msg.payload)
-            print(output)
-        elif first_byte == "C":
-            output = decoders.Commit(msg.payload)
-            print(output)
-        elif first_byte == "R":
-            #print(msg.payload)
-            output = decoders.Relation(msg.payload)
-            print(output)
-        elif first_byte == "I":
-            output = decoders.Insert(msg.payload)
-            print(output)
-        elif first_byte == "U":
-            #print(msg.payload)
-            output = decoders.Update(msg.payload)
-            print(output)
-        elif first_byte == 'D':
-            output = decoders.Delete(msg.payload)
-            print(output)
-        else:
-            print(msg.payload)
-
+        output = decoders.decode_message(msg.payload)
+        print(output)
+        write_raw_test_file(msg.data_start, first_byte, msg.payload)
         msg.cursor.send_feedback(flush_lsn=msg.data_start)  # to check why you flush data start
-
         print(f"data start LSN : {msg.data_start}")
-
-
         
 
 consumer = LogicalStreamConsumer()

@@ -2,12 +2,12 @@ version: '3'
 services:
 
   database:
-    image: "postgres:10.6" 
+    image: "postgres:12.3" 
     ports: 
       - 5432:5432
     environment: 
       POSTGRES_PASSWORD: test
-      POSTGRES_USER: admin
+      POSTGRES_USER: test
       POSTGRES_DB: test
       POSTGRES_PORT: 5432
     volumes:

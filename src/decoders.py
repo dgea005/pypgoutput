@@ -32,6 +32,29 @@ def decode_unknown_length_string(_buffer, _position):
             _position += 1
     return _position, the_string
 
+
+def decode_message(_input_bytes):
+    """Peak first byte and initialise the appropriate message object"""
+    first_byte = (_input_bytes[:1]).decode('utf-8')
+    if first_byte == 'B':
+        output = Begin(_input_bytes)
+    elif first_byte == "C":
+        output = Commit(_input_bytes)
+    elif first_byte == "R":
+        output = Relation(_input_bytes)
+    elif first_byte == "I":
+        output = Insert(_input_bytes)
+    elif first_byte == "U":
+        output = Update(_input_bytes)
+    elif first_byte == 'D':
+        output = Delete(_input_bytes)
+    elif first_byte == 'T':
+        output = Truncate(_input_bytes)
+    else:
+        print(f"warning unrecognised message {_input_bytes}")
+        output = None
+    return output
+
 class PgoutputMessage(ABC):
 
     def __init__(self, buffer):
@@ -98,7 +121,7 @@ class Origin:
     Int64  The LSN of the commit on the origin server.
     String Name of the origin.
     Note that there can be multiple Origin messages inside a single transaction.
-
+    This seems to be what origin means: https://www.postgresql.org/docs/12/replication-origins.html
     """
     pass
 
@@ -282,13 +305,10 @@ class Delete(PgoutputMessage):
         if self.byte1 != 'D':
             raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
         self.relation_id = convert_bytes_to_int(self.buffer[1:5])
-
         self.message_type = convert_bytes_to_utf8(self.buffer[5:6])
         if ((self.message_type != 'K') and (self.message_type != 'O')):
             raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
-
         self.tuple_data = TupleData(self.buffer[6:])
-
         return self
 
     def __repr__(self):
@@ -297,11 +317,26 @@ class Delete(PgoutputMessage):
 
 
 
-class Truncate:
+class Truncate(PgoutputMessage):
     """
     Byte1('T')      Identifies the message as a truncate message.
     Int32           Number of relations
     Int8            Option bits for TRUNCATE: 1 for CASCADE, 2 for RESTART IDENTITY
     Int32           ID of the relation corresponding to the ID in the relation message. This field is repeated for each relation.
+
     """
-    pass
+    def decode_buffer(self):
+        if self.byte1 != 'T':
+            raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
+        self.number_of_relations = convert_bytes_to_int(self.buffer[1:5])
+        self.option_bits = convert_bytes_to_int(self.buffer[5:6])
+        self.relation_ids = []
+        buffer_pos = 6
+        for rel in range(self.number_of_relations):
+            self.relation_ids.append(convert_bytes_to_int(self.buffer[buffer_pos: buffer_pos+4]))
+            buffer_pos += 4
+            
+
+    def __repr__(self):
+        return f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations : {self.number_of_relations} "\
+               f"option_bits : {self.option_bits}, relation_ids : {self.relation_ids}   "

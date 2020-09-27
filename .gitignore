@@ -2,3 +2,5 @@ __pycache__/
 .pytest_cache
 test-env/
 *.out
+files/
+src/pypgoutput.egg-info

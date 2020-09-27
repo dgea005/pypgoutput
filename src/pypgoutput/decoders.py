@@ -176,7 +176,8 @@ class Relation(PgoutputMessage):
                f",\n\treplica_identity_setting : '{self.replica_identity_setting}',\n\tn_columns : {self.n_columns} " \
                f",\n\tcolumns : {self.columns}"
 
-class Type:
+# renamed to PgType to not use "type" name
+class PgType:
     """
     Byte1('Y') Identifies the message as a type message.
     Int32 ID of the data type.

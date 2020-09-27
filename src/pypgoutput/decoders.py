@@ -210,6 +210,7 @@ class TupleData:
         self.n_columns = convert_bytes_to_int(self.buffer[0:2])
         self.pos = 2
         for c in range(self.n_columns):
+            # COL_TYPE is about a column is Null, TOASTed or text formatted
             col_type = convert_bytes_to_utf8(self.buffer[self.pos:self.pos+1])
             self.pos += 1
             if col_type == 'n':

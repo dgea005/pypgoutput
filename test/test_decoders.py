@@ -1,39 +1,46 @@
 from pypgoutput import decoders
 
-
 TEST_DIR = "files"
 
 # files have been produced by get_replication_records.py
-# file name schem: {lsn}_{message_type.lower()}_{file_name}
-test_files = [
-    "0_r_90fbc783-4017-4223-b104-504ff1f444f1",
-    "0_r_a0ad09a5-119b-4162-8a64-47613c1c9f75",
-    "0_r_b9b1606a-9a9e-44a0-bbdf-c50959ab86fd",
-    "23704624_b_2f49c54c-a06a-42a1-8b0d-ad999985dfc1",
-    "23716712_t_1986ec26-27ad-4ca7-9c87-7ed45c62ddf6",
-    "23717000_c_66f40d53-2d34-47e3-b766-1e42905459e2",
-    "23717056_b_734719fc-2786-4710-a4e9-a2cdb17917da",
-    "23717056_i_c88d73f7-6ac1-4101-afeb-93fe7d70f0be",
-    "23717336_b_30f5367b-8aa5-4038-bec8-58867486203c",
-    "23717336_c_99f92407-2cde-4b73-a7e3-40eaa631d295",
-    "23717336_i_443e6a03-c0d6-43c6-b652-0e06588cbdfe",
-    "23717520_c_aa8edd8d-6842-483a-a8dc-f7a58c0a1a0d",
-    "23717576_b_0d600c48-54d0-4831-867d-14730d55989d",
-    "23717576_u_e9914102-86ea-4621-a7f9-7971234e3e55",
-    "23717712_b_ade93d5f-2c83-4a49-aeab-d1454c2db728",
-    "23717712_c_d7d16dcf-3714-4e3b-807b-d3d13fd0249e",
-    "23717712_d_395ef829-32ca-4484-9bdd-949fb69ef31e",
-    "23717824_b_d1d1e146-8d2d-4d44-bd06-8e037f27993f",
-    "23717824_c_99c5817a-7a59-4f00-9ad8-e7758ba08214",
-    "23719224_t_dbabb219-caf2-49e8-b6c7-9950d55228e8",
-    "23719512_c_bc7a7f17-66ea-4fcf-9eba-a5aae5216753",
-]
+# file name schem: {lsn}_{message_type.lower()}
+with open(f"{TEST_DIR}/manifest", "r") as f:
+    test_files = (f.read()).split("\n")[:-1]
 
 
-def test_opening_binary_files():
-
-    for test_file in test_files:
+def test_can_decode_all_messages():
+    # test that all the files above can be decoded
+    for test_file in sorted(test_files):
         with open(f"{TEST_DIR}/{test_file}", 'rb') as f:
             test_message = f.read()
         message = decoders.decode_message(test_message)
-        
+
+
+def test_decoded_message_contents():
+    """
+    INSERT INTO test_table (id, created) VALUES (4, '2011-01-01 12:00:00');
+    INSERT INTO test_table (id, created) VALUES (5, '2012-01-01 12:00:00');
+    INSERT INTO test_table (created, id) VALUES ('2014-01-01 12:00:00', 6);
+    UPDATE test_table set created = '2013-01-01 12:00:00' WHERE id = 5 ;
+    DELETE FROM test_table where id = 4;
+    """
+
+    # GET RELATION_ID
+    with open(f"{TEST_DIR}/0_r", "rb") as f:
+        relation_message = decoders.decode_message(f.read())
+    
+    assert relation_message.namespace == 'public'
+    assert relation_message.relation_name == 'test_table'
+
+    test_file_name = min([x for x in test_files if x[-1] == "i" ])
+
+    with open(f"{TEST_DIR}/{test_file_name}", "rb") as f:
+        insert_message = decoders.decode_message(f.read())
+
+    assert insert_message.byte1 == "I"
+    assert insert_message.relation_id == relation_message.relation_id
+    assert insert_message.new_tuple_byte == "N"
+    
+    assert insert_message.tuple_data.n_columns == 2
+    assert insert_message.tuple_data.column_data[0] == ('t', 1, '4')
+    assert insert_message.tuple_data.column_data[1] == ('t', 22, '2011-01-01 12:00:00+00')

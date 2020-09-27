@@ -1,10 +1,11 @@
 import sys
-import psycopg2
-from psycopg2.extras import LogicalReplicationConnection
-import decoders
 import uuid
 from datetime import datetime
+import psycopg2
+from psycopg2.extras import LogicalReplicationConnection
 from pypgoutput import decoders
+
+SLOT_NAME = "my_slot"
 
 conn = psycopg2.connect(
     'host=localhost user=test port=5432 dbname=test password=test',
@@ -14,24 +15,24 @@ replication_options = {
     'publication_names': 'pub',
     'proto_version': '1'}
 
-
 try:
     cur.start_replication(
-        slot_name='my_slot', decode=False,
+        slot_name=SLOT_NAME, decode=False,
         options=replication_options)
 except psycopg2.ProgrammingError:
-    cur.create_replication_slot('my_slot', output_plugin='pgoutput')
+    cur.create_replication_slot(SLOT_NAME, output_plugin='pgoutput')
     cur.start_replication(
-        slot_name='my_slot', decode=False,
+        slot_name=SLOT_NAME, decode=False,
         options=replication_options)
 
 
-
-def write_raw_test_file(lsn, message_type, payload, parent_dir="./test/files"):
-    file_name = f"{uuid.uuid4()}"
-    with open(f"{parent_dir}/{lsn}_{message_type.lower()}_{file_name}", 'wb') as f:
+def write_raw_test_file(lsn, message_type, payload, parent_dir="./files"):
+    file_name = f"{lsn}_{message_type.lower()}"
+    with open(f"{parent_dir}/{file_name}", 'wb') as f:
         f.write(payload)
-
+    
+    with open(f"{parent_dir}/manifest", "a") as manifest:
+        manifest.write(file_name + "\n")
 
 class LogicalStreamConsumer(object):
     def __call__(self, msg):
@@ -51,8 +52,7 @@ try:
 except KeyboardInterrupt:
    cur.close()
    conn.close()
-   print("The slot 'my_slot' still exists. Drop it with "
-         "SELECT pg_drop_replication_slot('my_slot'); if no longer needed.",
+   print(f"The slot '{SLOT_NAME}' still exists. Drop it with "
+         f"SELECT pg_drop_replication_slot('{SLOT_NAME}'); if no longer needed.",
          file=sys.stderr)
-   print("WARNING: Transaction logs will accumulate in pg_xlog "
-         "until the slot is dropped.", file=sys.stderr)
+   print("WARNING: Transaction logs will accumulate in pg_xlog until the slot is dropped.", file=sys.stderr)

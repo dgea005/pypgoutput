@@ -1,8 +1,5 @@
 #!/bin/bash
-
 set -e
-
-#make setup
 source test-env/bin/activate
 
 TEST_FOLDER="files"

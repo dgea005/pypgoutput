@@ -13,12 +13,10 @@ def convert_bytes_to_utf8(_in_bytes):
     return (_in_bytes).decode('utf-8')
 
 def decode_unknown_length_string(_buffer, _position):
-    """
-
-    Returns end position and string
-    """
+    """Returns end position and string"""
     the_string = ""
-    for i in range(256): # TODO could change to while true but don't expect long strings
+    # TODO could change to while true but don't expect long strings
+    for i in range(256): 
         if _buffer[_position:_position+1] == b'\x00':
             _position += 1
             break

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
 
 
-
 def convert_pg_ts(_ts_in_microseconds):
     ts = datetime(2000, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc) 
     return ts + timedelta(microseconds=_ts_in_microseconds)
@@ -19,7 +18,7 @@ def decode_unknown_length_string(_buffer, _position):
     Returns end position and string
     """
     the_string = ""
-    for i in range(128): # TODO could change to while true but don't expect long strings
+    for i in range(256): # TODO could change to while true but don't expect long strings
         if _buffer[_position:_position+1] == b'\x00':
             _position += 1
             break
@@ -136,6 +135,7 @@ class Relation(PgoutputMessage):
     Int8 Replica identity setting for the relation (same as relreplident in pg_class).
         # select relreplident from pg_class where relname = 'test_table';
         # from reading the documentation and looking at the tables this is not int8 but a single character
+        # background: https://www.postgresql.org/docs/10/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY 
     Int16 Number of columns.
     Next, the following message part appears for each column (except generated columns):
         Int8 Flags for the column. Currently can be either 0 for no flags or 1 which marks the column as part of the key.

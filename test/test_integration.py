@@ -1,6 +1,6 @@
 from pypgoutput import decoders
 
-TEST_DIR = "files"
+TEST_DIR = "test_output_files"
 
 # files have been produced by get_replication_records.py
 # file name schem: {lsn}_{message_type.lower()}
@@ -8,7 +8,7 @@ with open(f"{TEST_DIR}/manifest", "r") as f:
     test_files = (f.read()).split("\n")[:-1]
 
 
-def test_can_decode_all_messages():
+def test_decode_all_messages():
     # test that all the files above can be decoded
     for test_file in sorted(test_files):
         with open(f"{TEST_DIR}/{test_file}", 'rb') as f:
@@ -44,3 +44,13 @@ def test_decoded_message_contents():
     assert insert_message.tuple_data.n_columns == 2
     assert insert_message.tuple_data.column_data[0] == ('t', 1, '4')
     assert insert_message.tuple_data.column_data[1] == ('t', 22, '2011-01-01 12:00:00+00')
+
+    expected_results = {
+        "5": "2013-01-01 12:00:00",
+        "6": "2014-01-01 12:00:00",
+    }
+    for raw_msg in sorted(test_files):
+        if test_files[-1] in ["i", "u", "d"]:
+            with open(f"{TEST_DIR}/{raw_msg}", "rb") as f:
+                msg = decoders.decode_message(f.read())
+            

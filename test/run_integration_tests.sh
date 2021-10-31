@@ -3,7 +3,7 @@
 set -e
 
 #make setup
-. test-env/bin/activate
+source test-env/bin/activate
 
 TEST_FOLDER="files"
 rm -rf ${TEST_FOLDER} && mkdir -p ${TEST_FOLDER}
@@ -14,8 +14,8 @@ export PGDATABASE=test
 export PGUSER=test
 export PGPASSWORD=test
 
-docker-compose -f docker-compose.yml down -v --remove-orphans
-docker-compose -f docker-compose.yml up -d
+docker-compose -f docker-compose.yaml down -v --remove-orphans
+docker-compose -f docker-compose.yaml up -d
 
 echo "Postgres docker running. Waiting until ready"
 RETRIES=5
@@ -32,4 +32,6 @@ nohup python get_replication_records.py &
 
 psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a --file=test_queries.sql
 
-pytest -svx test_decoders.py
+sleep 1
+
+pytest -svx test_integration.py

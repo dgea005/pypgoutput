@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional, List
 
 
 def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
@@ -54,6 +54,11 @@ class Begin(PgoutputMessage):
     commit_tx_ts Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     tx_xid Int32 Xid of the transaction.
     """
+    byte1: str
+    final_tx_lsn: int
+    commit_tx_ts: datetime
+    tx_xid: int
+
     def decode_buffer(self):
         if self.byte1 != 'B':
             raise Exception('first byte in buffer does not match Begin message')
@@ -75,6 +80,12 @@ class Commit(PgoutputMessage):
     final_tx_lsn: Int64 The end LSN of the transaction.
     Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     """
+    byte1: str
+    flags: int
+    lsn_commit: int
+    final_tx_lsn: int
+    commit_tx_ts: datetime
+
     def decode_buffer(self):
         if self.byte1 != 'C':
             raise Exception('first byte in buffer does not match Commit message')
@@ -117,6 +128,14 @@ class Relation(PgoutputMessage):
         Int32 ID of the column's data type.
         Int32 Type modifier of the column (atttypmod).
     """
+    byte1: str
+    relation_id: int
+    namespace: str
+    relation_name: str
+    replica_identity_setting: str
+    n_columns: int
+    columns: List[Tuple[int, str, int, int]] # TODO define column type
+
     def decode_buffer(self):
         if self.byte1 != 'R':
             raise Exception('first byte in buffer does not match Relation message')
@@ -172,6 +191,11 @@ class TupleData:
             Int32 Length of the column value.
             Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
     """
+    buffer: bytes
+    pos: int
+    n_columns: Optional[int]
+    column_data: List[Tuple[str, int, str]]
+
     def __init__(self, buffer):
         self.buffer = buffer
         self.pos = 0
@@ -212,6 +236,11 @@ class Insert(PgoutputMessage):
     Byte1('N') Identifies the following TupleData message as a new tuple.
     TupleData TupleData message part representing the contents of new tuple.
     """
+    byte1: str
+    relation_id: int
+    new_tuple_byte: str 
+    tuple_data: TupleData
+
     def decode_buffer(self):
         if self.byte1 != 'I':
             raise Exception(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
@@ -237,6 +266,15 @@ class Update(PgoutputMessage):
 
     The Update message may contain either a 'K' message part or an 'O' message part or neither of them, but never both of them.
     """
+    byte1: str
+    relation_id: int
+    next_byte_identifier: Optional[str]
+    optional_tuple_identifier: Optional[str]
+    old_tuple: Optional[TupleData]
+    new_tuple_identifier: str
+    new_tuple: TupleData
+
+
     def decode_buffer(self):
         self.optional_tuple_identifier = None
         self.new_tuple_identifier = None
@@ -279,6 +317,11 @@ class Delete(PgoutputMessage):
 
     The Delete message may contain either a 'K' message part or an 'O' message part, but never both of them.
     """
+    byte1: str
+    relation_id: int
+    message_type: str
+    tuple_data: TupleData
+
     def decode_buffer(self):
         if self.byte1 != 'D':
             raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
@@ -300,8 +343,13 @@ class Truncate(PgoutputMessage):
     Int32           Number of relations
     Int8            Option bits for TRUNCATE: 1 for CASCADE, 2 for RESTART IDENTITY
     Int32           ID of the relation corresponding to the ID in the relation message. This field is repeated for each relation.
-
     """
+    byte1: str
+    number_of_relations: int
+    option_bits: str
+    tuple_data: TupleData
+    relation_ids: List[int]
+
     def decode_buffer(self):
         if self.byte1 != 'T':
             raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
@@ -311,21 +359,20 @@ class Truncate(PgoutputMessage):
         buffer_pos = 6
         for rel in range(self.number_of_relations):
             self.relation_ids.append(convert_bytes_to_int(self.buffer[buffer_pos: buffer_pos+4]))
-            buffer_pos += 4
-            
+            buffer_pos += 4            
 
     def __repr__(self):
         return f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations : {self.number_of_relations} "\
                f"option_bits : {self.option_bits}, relation_ids : {self.relation_ids}   "
 
 
-def decode_message(_input_bytes: bytes) -> Union[None, Begin, Commit, Relation, Insert, Update, Delete, Truncate]:
+def decode_message(_input_bytes: bytes) -> Optional[Union[Begin, Commit, Relation, Insert, Update, Delete, Truncate]]:
     """Peak first byte and initialise the appropriate message object"""
     first_byte = (_input_bytes[:1]).decode('utf-8')
     if first_byte == 'B':
         output = Begin(_input_bytes)
     elif first_byte == "C":
-        output = Commit(_input_bytes)
+        output = Commit(_input_bytes)   
     elif first_byte == "R":
         output = Relation(_input_bytes)
     elif first_byte == "I":

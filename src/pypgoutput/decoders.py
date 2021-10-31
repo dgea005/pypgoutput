@@ -1,18 +1,19 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
+from typing import Tuple, Union
 
 
-def convert_pg_ts(_ts_in_microseconds):
+def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
     ts = datetime(2000, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc) 
     return ts + timedelta(microseconds=_ts_in_microseconds)
 
-def convert_bytes_to_int(_in_bytes):
+def convert_bytes_to_int(_in_bytes: bytes) -> int:
     return int.from_bytes(_in_bytes, byteorder='big', signed=True)    
 
-def convert_bytes_to_utf8(_in_bytes):
+def convert_bytes_to_utf8(_in_bytes: bytes) -> str:
     return (_in_bytes).decode('utf-8')
 
-def decode_unknown_length_string(_buffer, _position):
+def decode_unknown_length_string(_buffer: bytes, _position: int) -> Tuple[int, str]:
     """Returns end position and string"""
     the_string = ""
     # TODO could change to while true but don't expect long strings
@@ -30,31 +31,9 @@ def decode_unknown_length_string(_buffer, _position):
     return _position, the_string
 
 
-def decode_message(_input_bytes):
-    """Peak first byte and initialise the appropriate message object"""
-    first_byte = (_input_bytes[:1]).decode('utf-8')
-    if first_byte == 'B':
-        output = Begin(_input_bytes)
-    elif first_byte == "C":
-        output = Commit(_input_bytes)
-    elif first_byte == "R":
-        output = Relation(_input_bytes)
-    elif first_byte == "I":
-        output = Insert(_input_bytes)
-    elif first_byte == "U":
-        output = Update(_input_bytes)
-    elif first_byte == 'D':
-        output = Delete(_input_bytes)
-    elif first_byte == 'T':
-        output = Truncate(_input_bytes)
-    else:
-        print(f"warning unrecognised message {_input_bytes}")
-        output = None
-    return output
-
 class PgoutputMessage(ABC):
 
-    def __init__(self, buffer):
+    def __init__(self, buffer: bytes):
         self.buffer = buffer
         self.byte1 = convert_bytes_to_utf8(self.buffer[0:1])
         self.decode_buffer()
@@ -75,7 +54,6 @@ class Begin(PgoutputMessage):
     commit_tx_ts Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     tx_xid Int32 Xid of the transaction.
     """
-
     def decode_buffer(self):
         if self.byte1 != 'B':
             raise Exception('first byte in buffer does not match Begin message')
@@ -97,7 +75,6 @@ class Commit(PgoutputMessage):
     final_tx_lsn: Int64 The end LSN of the transaction.
     Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     """
-
     def decode_buffer(self):
         if self.byte1 != 'C':
             raise Exception('first byte in buffer does not match Commit message')
@@ -123,7 +100,6 @@ class Origin:
     pass
 
 
-
 class Relation(PgoutputMessage):
     """
     Byte1('R')  Identifies the message as a relation message.
@@ -141,7 +117,6 @@ class Relation(PgoutputMessage):
         Int32 ID of the column's data type.
         Int32 Type modifier of the column (atttypmod).
     """
-
     def decode_buffer(self):
         if self.byte1 != 'R':
             raise Exception('first byte in buffer does not match Relation message')
@@ -167,12 +142,12 @@ class Relation(PgoutputMessage):
             position += 4            
             self.columns.append( (part_of_pkey, col_name, data_type_id, col_modifier, ))
 
-
     def __repr__(self):
         return f"RELATION \n\tbyte1 : '{self.byte1}', \n\trelation_id : {self.relation_id}" \
                f",\n\tnamespace/schema : '{self.namespace}',\n\trelation_name : '{self.relation_name}'" \
                f",\n\treplica_identity_setting : '{self.replica_identity_setting}',\n\tn_columns : {self.n_columns} " \
                f",\n\tcolumns : {self.columns}"
+
 
 # renamed to PgType to not use "type" name
 class PgType:
@@ -229,6 +204,7 @@ class TupleData:
     def __repr__(self):
         return f"( n_columns : {self.n_columns}, data : {self.column_data})"
 
+
 class Insert(PgoutputMessage):
     """
     Byte1('I')  Identifies the message as an insert message.
@@ -247,6 +223,7 @@ class Insert(PgoutputMessage):
     def __repr__(self):
         return f"INSERT \n\tbyte1: '{self.byte1}', \n\trelation_id : {self.relation_id} " \
                f"\n\tnew tuple byte: '{self.new_tuple_byte}', \n\ttuple_data : {self.tuple_data}"
+
 
 class Update(PgoutputMessage):
     """
@@ -291,6 +268,7 @@ class Update(PgoutputMessage):
                f" \n\toptional_tuple_identifier : '{self.optional_tuple_identifier}', \n\toptional_old_tuple_data : {self.old_tuple} " \
                f" \n\tnew_tuple_identifier : '{self.new_tuple_identifier}', \n\tnew_tuple : {self.new_tuple}"
 
+
 class Delete(PgoutputMessage):
     """
     Byte1('D')      Identifies the message as a delete message.
@@ -316,7 +294,6 @@ class Delete(PgoutputMessage):
                f"\n\tmessage_type : {self.message_type} \n\ttuple_data : {self.tuple_data}"
 
 
-
 class Truncate(PgoutputMessage):
     """
     Byte1('T')      Identifies the message as a truncate message.
@@ -340,3 +317,26 @@ class Truncate(PgoutputMessage):
     def __repr__(self):
         return f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations : {self.number_of_relations} "\
                f"option_bits : {self.option_bits}, relation_ids : {self.relation_ids}   "
+
+
+def decode_message(_input_bytes: bytes) -> Union[None, Begin, Commit, Relation, Insert, Update, Delete, Truncate]:
+    """Peak first byte and initialise the appropriate message object"""
+    first_byte = (_input_bytes[:1]).decode('utf-8')
+    if first_byte == 'B':
+        output = Begin(_input_bytes)
+    elif first_byte == "C":
+        output = Commit(_input_bytes)
+    elif first_byte == "R":
+        output = Relation(_input_bytes)
+    elif first_byte == "I":
+        output = Insert(_input_bytes)
+    elif first_byte == "U":
+        output = Update(_input_bytes)
+    elif first_byte == 'D':
+        output = Delete(_input_bytes)
+    elif first_byte == 'T':
+        output = Truncate(_input_bytes)
+    else:
+        print(f"warning unrecognised message {_input_bytes}")
+        output = None
+    return output

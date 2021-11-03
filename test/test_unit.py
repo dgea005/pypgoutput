@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from pypgoutput import decoders
+from pypgoutput import decoders, ColumnData
 
 
 def test_relation_message():
@@ -33,14 +33,14 @@ def test_insert_message():
     assert decoded_msg.byte1 == "I"
     assert decoded_msg.relation_id == 16385
     assert decoded_msg.new_tuple_byte == "N"
-    assert type(decoded_msg.tuple_data) == decoders.TupleData
+    assert type(decoded_msg.new_tuple) == decoders.TupleData
     
-    assert decoded_msg.tuple_data.n_columns == 2
-    assert type(decoded_msg.tuple_data.column_data) == list
+    assert decoded_msg.new_tuple.n_columns == 2
+    assert type(decoded_msg.new_tuple.column_data) == list
     
     # (col_type, col_data_length, col_data)
-    assert decoded_msg.tuple_data.column_data[0] == ("t", 1, '5')
-    assert decoded_msg.tuple_data.column_data[1] == ('t', 22, '2012-01-01 12:00:00+00')
+    assert decoded_msg.new_tuple.column_data[0] == ColumnData("t", 1, '5')
+    assert decoded_msg.new_tuple.column_data[1] == ColumnData('t', 22, '2012-01-01 12:00:00+00')
 
 def test_update_message():
     message = b'U\x00\x00@\x01N\x00\x02t\x00\x00\x00\x015t\x00\x00\x00\x162013-01-01 12:00:00+00'

@@ -2,8 +2,6 @@
 set -e
 source test-env/bin/activate
 
-TEST_FOLDER="files"
-rm -rf ${TEST_FOLDER} && mkdir -p ${TEST_FOLDER}
 
 export PGHOST=localhost
 export PGPORT=5432
@@ -20,9 +18,6 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
   echo "Waiting for postgres server, $((RETRIES--)) remaining attempts..."
   sleep 1
 done
-
-PYTHON_VER=$(which python)
-echo "${PYTHON_VER}"
 
 # Start script to create individual binary files of pgoutput records
 nohup python get_replication_records.py &

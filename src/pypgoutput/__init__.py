@@ -9,3 +9,4 @@ from pypgoutput.decoders import Update
 from pypgoutput.decoders import Delete
 from pypgoutput.decoders import Truncate
 from pypgoutput.decoders import decode_message
+from pypgoutput.decoders import ColumnData

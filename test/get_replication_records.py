@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import psycopg2
 from psycopg2.extras import LogicalReplicationConnection
@@ -48,5 +49,6 @@ def produce_logical_replication_messages():
     print("WARNING: Transaction logs will accumulate in pg_xlog until the slot is dropped.", file=sys.stderr)
 
 if __name__ == "__main__":
+    shutil.rmtree(TEST_DIR)
     os.makedirs(TEST_DIR, exist_ok=True)
     produce_logical_replication_messages()

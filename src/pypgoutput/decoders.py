@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import Tuple, Union, Optional, List
+from typing import Tuple, Union, Optional, List, NamedTuple
 
 
 def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
@@ -49,6 +50,9 @@ class PgoutputMessage(ABC):
 
 class Begin(PgoutputMessage):
     """
+    https://pgpedia.info/x/xlogrecptr.html
+    https://www.postgresql.org/docs/14/datatype-pg-lsn.html
+
     byte1 Byte1('B') Identifies the message as a begin message.
     final_tx_lsn Int64 The final LSN of the transaction.
     commit_tx_ts Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
@@ -134,7 +138,8 @@ class Relation(PgoutputMessage):
     relation_name: str
     replica_identity_setting: str
     n_columns: int
-    columns: List[Tuple[int, str, int, int]] # TODO define column type
+    # TODO define column type, could eventually look this up from the DB
+    columns: List[Tuple[int, str, int, int]] 
 
     def decode_buffer(self):
         if self.byte1 != 'R':
@@ -178,6 +183,19 @@ class PgType:
     """
     pass
 
+@dataclass(frozen=True)
+class ColumnData:
+    # This is NOT the type. it means null value/toasted(not sent)/text formatted
+    col_data_category: Optional[str] 
+    col_data_length: Optional[int] = None
+    col_data: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class TupleDataV2:
+    n_columns: Optional[int]
+    column_data: Optional[List[ColumnData]]
+
 
 class TupleData:
     """
@@ -194,7 +212,7 @@ class TupleData:
     buffer: bytes
     pos: int
     n_columns: Optional[int]
-    column_data: List[Tuple[str, int, str]]
+    column_data: List[Tuple[ColumnData]]
 
     def __init__(self, buffer):
         self.buffer = buffer
@@ -208,25 +226,63 @@ class TupleData:
         self.pos = 2
         for c in range(self.n_columns):
             # COL_TYPE is about a column is Null, TOASTed or text formatted
-            col_type = convert_bytes_to_utf8(self.buffer[self.pos:self.pos+1])
+            col_data_category = convert_bytes_to_utf8(self.buffer[self.pos:self.pos+1])
             self.pos += 1
-            if col_type == 'n':
+            if col_data_category == 'n':
                 # NULLs TODO: consider putting an actual None / NULL
-                self.column_data.append( (col_type, ) )
-            elif col_type == 'u':
+                self.column_data.append(ColumnData(col_data_category=col_data_category))
+            elif col_data_category == 'u':
                 # TOASTed value (data not sent)
-                self.column_data.append( (col_type, ))
-            elif col_type == 't':
+                self.column_data.append(ColumnData(col_data_category=col_data_category))
+            elif col_data_category == 't':
                 # get column length
                 col_data_length = convert_bytes_to_int(self.buffer[self.pos:self.pos+4])
                 self.pos += 4
                 col_data = convert_bytes_to_utf8(self.buffer[self.pos:self.pos+col_data_length])
                 self.pos += col_data_length
-                self.column_data.append( (col_type, col_data_length, col_data, ))
+                self.column_data.append(ColumnData(col_data_category=col_data_category, col_data_length=col_data_length, col_data=col_data))
         return self
 
     def __repr__(self):
         return f"( n_columns : {self.n_columns}, data : {self.column_data})"
+
+
+def decode_tuple_data(buffer: bytes) -> TupleDataV2:
+    """TupleData 
+    Int16  Number of columns.
+    Next, one of the following submessages appears for each column (except generated columns):
+            Byte1('n') Identifies the data as NULL value.
+        Or
+            Byte1('u') Identifies unchanged TOASTed value (the actual value is not sent).
+        Or
+            Byte1('t') Identifies the data as text formatted value.
+            Int32 Length of the column value.
+            Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
+    """
+    pos = 0
+    n_columns = None
+    column_data = list()  
+    n_columns = convert_bytes_to_int(buffer[0:2])
+    for c in range(n_columns):
+        # COL_TYPE is about a column is Null, TOASTed or text formatted
+        col_type = convert_bytes_to_utf8(buffer[pos:pos+1])
+        pos += 1
+        if col_type == 'n':
+            # NULLs TODO: consider putting an actual None / NULL
+            column_data.append(ColumnData(col_type=col_type))
+        elif col_type == 'u':
+            # TOASTed value (data not sent)
+            column_data.append(ColumnData(col_type=col_type))
+        elif col_type == 't':
+            # get column length
+            col_data_length = convert_bytes_to_int(buffer[pos:pos+4])
+            pos += 4
+            col_data = convert_bytes_to_utf8(buffer[pos:pos+col_data_length])
+            pos += col_data_length
+            column_data.append(ColumnData(col_type=col_type, col_data_length=col_data_length, col_data=col_data))
+    return TupleDataV2(n_columns=n_columns, column_data=col_data)
+    
+
 
 
 class Insert(PgoutputMessage):
@@ -239,19 +295,19 @@ class Insert(PgoutputMessage):
     byte1: str
     relation_id: int
     new_tuple_byte: str 
-    tuple_data: TupleData
+    new_tuple: TupleData
 
     def decode_buffer(self):
         if self.byte1 != 'I':
             raise Exception(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
         self.relation_id = convert_bytes_to_int(self.buffer[1:5])
         self.new_tuple_byte = convert_bytes_to_utf8(self.buffer[5:6])
-        self.tuple_data = TupleData(self.buffer[6:])
+        self.new_tuple = TupleData(self.buffer[6:])
         return self
 
     def __repr__(self):
         return f"INSERT \n\tbyte1: '{self.byte1}', \n\trelation_id : {self.relation_id} " \
-               f"\n\tnew tuple byte: '{self.new_tuple_byte}', \n\ttuple_data : {self.tuple_data}"
+               f"\n\tnew tuple byte: '{self.new_tuple_byte}', \n\tnew_tuple : {self.new_tuple}"
 
 
 class Update(PgoutputMessage):
@@ -271,13 +327,13 @@ class Update(PgoutputMessage):
     next_byte_identifier: Optional[str]
     optional_tuple_identifier: Optional[str]
     old_tuple: Optional[TupleData]
-    new_tuple_identifier: str
+    new_tuple_byte: str
     new_tuple: TupleData
 
 
     def decode_buffer(self):
         self.optional_tuple_identifier = None
-        self.new_tuple_identifier = None
+        self.new_tuple_byte = None
         self.old_tuple = None
         if self.byte1 != 'U':
             raise Exception(f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'")
@@ -294,9 +350,9 @@ class Update(PgoutputMessage):
         else:
             buffer_pos = 5 # 5 because N would need to be read again
         
-        self.new_tuple_identifier = convert_bytes_to_utf8(self.buffer[buffer_pos:buffer_pos+1])
-        if self.new_tuple_identifier != 'N':
-            raise Exception(f"did not find new_tuple_identifier ('N') at pos : {buffer_pos}, found : '{self.new_tuple_identifier}'")
+        self.new_tuple_byte = convert_bytes_to_utf8(self.buffer[buffer_pos:buffer_pos+1])
+        if self.new_tuple_byte != 'N':
+            raise Exception(f"did not find new_tuple_byte ('N') at pos : {buffer_pos}, found : '{self.new_tuple_byte}'")
         buffer_pos += 1
         self.new_tuple = TupleData(self.buffer[buffer_pos:])
         return self
@@ -304,7 +360,7 @@ class Update(PgoutputMessage):
     def __repr__(self):
         return f"UPDATE \n\tbyte1: '{self.byte1}', \n\trelation_id : {self.relation_id} " \
                f" \n\toptional_tuple_identifier : '{self.optional_tuple_identifier}', \n\toptional_old_tuple_data : {self.old_tuple} " \
-               f" \n\tnew_tuple_identifier : '{self.new_tuple_identifier}', \n\tnew_tuple : {self.new_tuple}"
+               f" \n\tnew_tuple_byte : '{self.new_tuple_byte}', \n\tnew_tuple : {self.new_tuple}"
 
 
 class Delete(PgoutputMessage):
@@ -320,7 +376,7 @@ class Delete(PgoutputMessage):
     byte1: str
     relation_id: int
     message_type: str
-    tuple_data: TupleData
+    old_tuple: TupleData
 
     def decode_buffer(self):
         if self.byte1 != 'D':
@@ -329,12 +385,12 @@ class Delete(PgoutputMessage):
         self.message_type = convert_bytes_to_utf8(self.buffer[5:6])
         if ((self.message_type != 'K') and (self.message_type != 'O')):
             raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
-        self.tuple_data = TupleData(self.buffer[6:])
+        self.old_tuple = TupleData(self.buffer[6:])
         return self
 
     def __repr__(self):
         return f"DELETE \n\tbyte1: {self.byte1} \n\trelation_id : {self.relation_id} " \
-               f"\n\tmessage_type : {self.message_type} \n\ttuple_data : {self.tuple_data}"
+               f"\n\tmessage_type : {self.message_type} \n\told_tuple : {self.old_tuple}"
 
 
 class Truncate(PgoutputMessage):

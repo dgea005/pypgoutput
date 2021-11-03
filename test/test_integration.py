@@ -48,7 +48,6 @@ def test_decoded_message_contents():
         {"type": "D", "id": "4", "created": "2011-01-01 12:00:00+00"},
     ]
     for idx, raw_msg in enumerate(sorted(t for t in test_files if t[-1] in ["i", "u", "d"])):
-        print(f"reading message: {raw_msg}")
         with open(f"{TEST_DIR}/{raw_msg}", "rb") as f:
             decoded_msg = decoders.decode_message(f.read())
             decoded_msg.relation_id == relation_message.relation_id

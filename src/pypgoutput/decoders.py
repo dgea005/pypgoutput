@@ -1,7 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
+import io
 from typing import Tuple, Union, Optional, List, NamedTuple
+
+
+# Byte lengths
+CHAR = 1
+INT8 = 1
+INT16 = 2
+INT32 = 4
+INT64 = 8
 
 
 def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
@@ -14,29 +23,30 @@ def convert_bytes_to_int(_in_bytes: bytes) -> int:
 def convert_bytes_to_utf8(_in_bytes: bytes) -> str:
     return (_in_bytes).decode('utf-8')
 
-def decode_unknown_length_string(_buffer: bytes, _position: int) -> Tuple[int, str]:
-    """Returns end position and string"""
-    the_string = ""
-    # TODO could change to while true but don't expect long strings
-    for i in range(256): 
-        if _buffer[_position:_position+1] == b'\x00':
-            _position += 1
-            break
-        try:
-            character = convert_bytes_to_utf8(_buffer[_position:_position+1])
-            the_string += character
-        except Exception as e:
-            print("could not decode string, assume end of string")
-        finally:
-            _position += 1
-    return _position, the_string
+
+
+@dataclass(frozen=True)
+class ColumnData:
+    # This is NOT the type. it means null value/toasted(not sent)/text formatted
+    col_data_category: Optional[str] 
+    col_data_length: Optional[int] = None
+    col_data: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class TupleData:
+    n_columns: Optional[int]
+    column_data: Optional[List[ColumnData]]
+
+    def __repr__(self):
+        return f"( n_columns : {self.n_columns}, data : {self.column_data})"
+
 
 
 class PgoutputMessage(ABC):
-
     def __init__(self, buffer: bytes):
-        self.buffer = buffer
-        self.byte1 = convert_bytes_to_utf8(self.buffer[0:1])
+        self.buffer: io.BytesIO = io.BytesIO(buffer)
+        self.byte1: str = self.read_utf8(1)
         self.decode_buffer()
 
     @abstractmethod
@@ -46,6 +56,77 @@ class PgoutputMessage(ABC):
     @abstractmethod
     def __repr__(self):
         pass
+
+    def read_int8(self) -> int:
+        return convert_bytes_to_int(self.buffer.read(INT8))
+
+    def read_int16(self) -> int:
+        return convert_bytes_to_int(self.buffer.read(INT16))
+
+    def read_int32(self) -> int:
+        return convert_bytes_to_int(self.buffer.read(INT32)) 
+
+    def read_int64(self) -> int:
+        return convert_bytes_to_int(self.buffer.read(INT64)) 
+
+    def read_utf8(self, n: int = 1) -> str:
+        return convert_bytes_to_utf8(self.buffer.read(n))
+
+    def read_timestamp(self) -> datetime:
+        # 8 chars -> int64 -> timestamp
+        return convert_pg_ts(_ts_in_microseconds=self.read_int64())
+
+    def read_arbitrary_string(self, max_allowed_length=256) -> str:
+        # read string by byte until exception is thrown
+        result = ""
+        # Could change to while true but don't expect long strings
+        for char in range(max_allowed_length): 
+            # TODO: what is this about? string termination?
+            next_char = self.buffer.read(1)
+            if next_char == b'\x00':
+                break
+            else:
+                try:
+                    character = convert_bytes_to_utf8(next_char)
+                    result += character
+                except Exception as e:
+                    # TODO: convert to logging
+                    print(f"could not decode character {next_char}")
+        return result
+
+    def read_tuple_data(self) -> TupleData:
+        """
+        TupleData 
+        Int16  Number of columns.
+        Next, one of the following submessages appears for each column (except generated columns):
+                Byte1('n') Identifies the data as NULL value.
+            Or
+                Byte1('u') Identifies unchanged TOASTed value (the actual value is not sent).
+            Or
+                Byte1('t') Identifies the data as text formatted value.
+                Int32 Length of the column value.
+                Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
+        """
+        #n_columns = None # why was this here?
+        # TODO: raise exception if not in I/U/D message
+        column_data = list()
+        n_columns = self.read_int16()
+        for column in range(n_columns):
+            col_data_category = self.read_utf8()
+            if col_data_category in ("n", "u"):
+                # "n"=NULL, "t"=TOASTed
+                column_data.append(ColumnData(col_data_category=col_data_category))
+            elif col_data_category == "t":
+                # t = tuple
+                col_data_length = self.read_int32()
+                col_data = self.read_utf8(col_data_length)
+                column_data.append(ColumnData(col_data_category=col_data_category, col_data_length=col_data_length, col_data=col_data))
+            else:
+                # TODO: log a warning
+                # what does happen with the generated columns? should an empty ColumnData be returned?
+                pass
+        return TupleData(n_columns=n_columns, column_data=column_data)
+
 
 
 class Begin(PgoutputMessage):
@@ -66,9 +147,9 @@ class Begin(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'B':
             raise Exception('first byte in buffer does not match Begin message')
-        self.final_tx_lsn = convert_bytes_to_int(self.buffer[1:9])
-        self.commit_tx_ts = convert_pg_ts( convert_bytes_to_int(self.buffer[9:17]) )
-        self.tx_xid = convert_bytes_to_int(self.buffer[17:21])
+        self.final_tx_lsn = self.read_int64() #convert_bytes_to_int(self.buffer.readInt64())
+        self.commit_tx_ts = self.read_timestamp() #convert_pg_ts(convert_bytes_to_int(self.buffer.readInt64()))
+        self.tx_xid = self.read_int64() #convert_bytes_to_int(self.buffer.readInt32())
         return self
 
     def __repr__(self):
@@ -93,10 +174,10 @@ class Commit(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'C':
             raise Exception('first byte in buffer does not match Commit message')
-        self.flags = convert_bytes_to_int(self.buffer[1:2])
-        self.lsn_commit = convert_bytes_to_int(self.buffer[2:10])
-        self.final_tx_lsn = convert_bytes_to_int(self.buffer[10:18])
-        self.commit_tx_ts = convert_pg_ts(convert_bytes_to_int(self.buffer[18:26]))
+        self.flags = self.read_utf8()
+        self.lsn_commit = self.read_int64() #convert_bytes_to_int(self.buffer[2:10])
+        self.final_tx_lsn = self.read_int64()
+        self.commit_tx_ts = self.read_timestamp()
         return self
 
     def __repr__(self):
@@ -142,29 +223,24 @@ class Relation(PgoutputMessage):
     columns: List[Tuple[int, str, int, int]] 
 
     def decode_buffer(self):
+        #print(self.buffer)
         if self.byte1 != 'R':
             raise Exception('first byte in buffer does not match Relation message')
-        self.relation_id = convert_bytes_to_int(self.buffer[1:5])
-        position = 5
-        position, self.namespace = decode_unknown_length_string(self.buffer, position)
-        position, self.relation_name = decode_unknown_length_string(self.buffer, position)
-        self.replica_identity_setting = convert_bytes_to_utf8(self.buffer[position:position+1])
-        position += 1
-        self.n_columns = convert_bytes_to_int(self.buffer[position:position+2])
-        position += 2
+        self.relation_id = self.read_int32()
+        self.namespace = self.read_arbitrary_string()
+        self.relation_name = self.read_arbitrary_string()
+        self.replica_identity_setting = self.read_utf8()
+        self.n_columns = self.read_int16()
         self.columns = list()
 
-        for c in range(self.n_columns):
-            part_of_pkey = convert_bytes_to_int(self.buffer[position:position+1])
-            position += 1
-            position, col_name = decode_unknown_length_string(self.buffer, position)
-            data_type_id = convert_bytes_to_int(self.buffer[position:position+4])
-            position += 4
+        for column in range(self.n_columns):
+            part_of_pkey = self.read_int8()
+            col_name = self.read_arbitrary_string()
+            data_type_id = self.read_int32()
             # TODO: check on use of signed / unsigned
             # check with select oid from pg_type where typname = <type>; timestamp == 1184, int4 = 23
-            col_modifier = convert_bytes_to_int(self.buffer[position:position+4])
-            position += 4            
-            self.columns.append( (part_of_pkey, col_name, data_type_id, col_modifier, ))
+            col_modifier = self.read_int32()          
+            self.columns.append((part_of_pkey, col_name, data_type_id, col_modifier))
 
     def __repr__(self):
         return f"RELATION \n\tbyte1 : '{self.byte1}', \n\trelation_id : {self.relation_id}" \
@@ -183,63 +259,6 @@ class PgType:
     """
     pass
 
-@dataclass(frozen=True)
-class ColumnData:
-    # This is NOT the type. it means null value/toasted(not sent)/text formatted
-    col_data_category: Optional[str] 
-    col_data_length: Optional[int] = None
-    col_data: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class TupleData:
-    n_columns: Optional[int]
-    column_data: Optional[List[ColumnData]]
-
-    def __repr__(self):
-        return f"( n_columns : {self.n_columns}, data : {self.column_data})"
-
-
-
-def decode_tuple_data(buffer: bytes) -> TupleData:
-    """
-    TupleData 
-    Int16  Number of columns.
-    Next, one of the following submessages appears for each column (except generated columns):
-            Byte1('n') Identifies the data as NULL value.
-        Or
-            Byte1('u') Identifies unchanged TOASTed value (the actual value is not sent).
-        Or
-            Byte1('t') Identifies the data as text formatted value.
-            Int32 Length of the column value.
-            Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
-    """
-    pos = 0
-    n_columns = None
-    column_data = list()  
-    n_columns = convert_bytes_to_int(buffer[0:2])
-    pos += 2
-    for c in range(n_columns):
-        # COL_TYPE is about a column is Null, TOASTed or text formatted
-        col_data_category = convert_bytes_to_utf8(buffer[pos:pos+1])
-        pos += 1
-        if col_data_category == 'n':
-            # NULLs TODO: consider putting an actual None / NULL
-            column_data.append(ColumnData(col_data_category=col_data_category))
-        elif col_data_category == 'u':
-            # TOASTed value (data not sent)
-            column_data.append(ColumnData(col_data_category=col_data_category))
-        elif col_data_category == 't':
-            # get column length
-            col_data_length = convert_bytes_to_int(buffer[pos:pos+4])
-            pos += 4
-            col_data = convert_bytes_to_utf8(buffer[pos:pos+col_data_length])
-            pos += col_data_length
-            column_data.append(ColumnData(col_data_category=col_data_category, col_data_length=col_data_length, col_data=col_data))
-    return TupleData(n_columns=n_columns, column_data=column_data)
-    
-
-
 
 class Insert(PgoutputMessage):
     """
@@ -256,9 +275,9 @@ class Insert(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'I':
             raise Exception(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
-        self.relation_id = convert_bytes_to_int(self.buffer[1:5])
-        self.new_tuple_byte = convert_bytes_to_utf8(self.buffer[5:6])
-        self.new_tuple = decode_tuple_data(self.buffer[6:])
+        self.relation_id = self.read_int32()
+        self.new_tuple_byte = self.read_utf8()
+        self.new_tuple = self.read_tuple_data()
         return self
 
     def __repr__(self):
@@ -286,31 +305,23 @@ class Update(PgoutputMessage):
     new_tuple_byte: str
     new_tuple: TupleData
 
-
     def decode_buffer(self):
         self.optional_tuple_identifier = None
-        self.new_tuple_byte = None
         self.old_tuple = None
         if self.byte1 != 'U':
             raise Exception(f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'")
-        self.relation_id = convert_bytes_to_int(self.buffer[1:5])
-
-        # i.e., K, O or N
+        self.relation_id = self.read_int32()
         # TODO test update to PK, test update with REPLICA IDENTITY = FULL
-        self.next_byte_identifier = convert_bytes_to_utf8(self.buffer[5:6])
-
+        self.next_byte_identifier = self.read_utf8() # one of K, O or N
         if self.next_byte_identifier == 'K' or self.next_byte_identifier == 'O':
             self.optional_tuple_identifier = self.next_byte_identifier
-            self.old_tuple = decode_tuple_data(self.buffer[6:])
-            buffer_pos = self.old_tuple.pos + 6
+            self.old_tuple = self.read_tuple_data()
+            self.new_tuple_byte = self.read_utf8()
         else:
-            buffer_pos = 5 # 5 because N would need to be read again
-        
-        self.new_tuple_byte = convert_bytes_to_utf8(self.buffer[buffer_pos:buffer_pos+1])
+            self.new_tuple_byte = self.next_byte_identifier
         if self.new_tuple_byte != 'N':
-            raise Exception(f"did not find new_tuple_byte ('N') at pos : {buffer_pos}, found : '{self.new_tuple_byte}'")
-        buffer_pos += 1
-        self.new_tuple = decode_tuple_data(self.buffer[buffer_pos:])
+            raise Exception(f"did not find new_tuple_byte ('N') at position: {self.buffer.tell()}, found: '{self.new_tuple_byte}'")
+        self.new_tuple = self.read_tuple_data()
         return self
 
     def __repr__(self):
@@ -337,11 +348,11 @@ class Delete(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'D':
             raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
-        self.relation_id = convert_bytes_to_int(self.buffer[1:5])
-        self.message_type = convert_bytes_to_utf8(self.buffer[5:6])
-        if ((self.message_type != 'K') and (self.message_type != 'O')):
+        self.relation_id = self.read_int32()
+        self.message_type = self.read_utf8() 
+        if self.message_type not in ['K','O']:
             raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
-        self.old_tuple = decode_tuple_data(self.buffer[6:])
+        self.old_tuple = self.read_tuple_data()
         return self
 
     def __repr__(self):
@@ -364,13 +375,11 @@ class Truncate(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'T':
             raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
-        self.number_of_relations = convert_bytes_to_int(self.buffer[1:5])
-        self.option_bits = convert_bytes_to_int(self.buffer[5:6])
+        self.number_of_relations = self.read_int32()
+        self.option_bits = self.read_utf8()
         self.relation_ids = []
-        buffer_pos = 6
-        for rel in range(self.number_of_relations):
-            self.relation_ids.append(convert_bytes_to_int(self.buffer[buffer_pos: buffer_pos+4]))
-            buffer_pos += 4            
+        for relation in range(self.number_of_relations):
+            self.relation_ids.append(self.read_int32())
 
     def __repr__(self):
         return f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations : {self.number_of_relations} "\

@@ -5,7 +5,7 @@ import io
 from typing import Tuple, Union, Optional, List
 
 
-# Byte lengths
+# integer byte lengths
 INT8 = 1
 INT16 = 2
 INT32 = 4
@@ -19,9 +19,8 @@ def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
 def convert_bytes_to_int(_in_bytes: bytes) -> int:
     return int.from_bytes(_in_bytes, byteorder='big', signed=True)    
 
-def convert_bytes_to_utf8(_in_bytes: bytes) -> str:
+def convert_bytes_to_utf8(_in_bytes: Union[bytes, bytearray]) -> str:
     return (_in_bytes).decode('utf-8')
-
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,6 @@ class TupleData:
 
     def __repr__(self):
         return f"( n_columns : {self.n_columns}, data : {self.column_data})"
-
 
 
 class PgoutputMessage(ABC):
@@ -75,23 +73,11 @@ class PgoutputMessage(ABC):
         # 8 chars -> int64 -> timestamp
         return convert_pg_ts(_ts_in_microseconds=self.read_int64())
 
-    def read_arbitrary_string(self, max_allowed_length=256) -> str:
-        # read string by byte until exception is thrown
-        result = ""
-        # Could change to while true but don't expect long strings
-        for char in range(max_allowed_length): 
-            # TODO: what is this about? string termination?
-            next_char = self.buffer.read(1)
-            if next_char == b'\x00':
-                break
-            else:
-                try:
-                    character = convert_bytes_to_utf8(next_char)
-                    result += character
-                except Exception as e:
-                    # TODO: convert to logging
-                    print(f"could not decode character {next_char}")
-        return result
+    def read_string(self):
+        output = bytearray()
+        while (next_char := self.buffer.read(1)) != b'\x00':
+            output += next_char
+        return convert_bytes_to_utf8(output)
 
     def read_tuple_data(self) -> TupleData:
         """
@@ -106,8 +92,6 @@ class PgoutputMessage(ABC):
                 Int32 Length of the column value.
                 Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
         """
-        #n_columns = None # why was this here?
-        # TODO: raise exception if not in I/U/D message
         column_data = list()
         n_columns = self.read_int16()
         for column in range(n_columns):
@@ -121,11 +105,9 @@ class PgoutputMessage(ABC):
                 col_data = self.read_utf8(col_data_length)
                 column_data.append(ColumnData(col_data_category=col_data_category, col_data_length=col_data_length, col_data=col_data))
             else:
-                # TODO: log a warning
-                # what does happen with the generated columns? should an empty ColumnData be returned?
+                # what happens with the generated columns? should an empty ColumnData be returned?
                 pass
         return TupleData(n_columns=n_columns, column_data=column_data)
-
 
 
 class Begin(PgoutputMessage):
@@ -146,9 +128,9 @@ class Begin(PgoutputMessage):
     def decode_buffer(self):
         if self.byte1 != 'B':
             raise Exception('first byte in buffer does not match Begin message')
-        self.final_tx_lsn = self.read_int64() #convert_bytes_to_int(self.buffer.readInt64())
-        self.commit_tx_ts = self.read_timestamp() #convert_pg_ts(convert_bytes_to_int(self.buffer.readInt64()))
-        self.tx_xid = self.read_int64() #convert_bytes_to_int(self.buffer.readInt32())
+        self.final_tx_lsn = self.read_int64() 
+        self.commit_tx_ts = self.read_timestamp()
+        self.tx_xid = self.read_int64()
         return self
 
     def __repr__(self):
@@ -174,7 +156,7 @@ class Commit(PgoutputMessage):
         if self.byte1 != 'C':
             raise Exception('first byte in buffer does not match Commit message')
         self.flags = self.read_utf8()
-        self.lsn_commit = self.read_int64() #convert_bytes_to_int(self.buffer[2:10])
+        self.lsn_commit = self.read_int64()
         self.final_tx_lsn = self.read_int64()
         self.commit_tx_ts = self.read_timestamp()
         return self
@@ -222,19 +204,18 @@ class Relation(PgoutputMessage):
     columns: List[Tuple[int, str, int, int]] 
 
     def decode_buffer(self):
-        #print(self.buffer)
         if self.byte1 != 'R':
             raise Exception('first byte in buffer does not match Relation message')
         self.relation_id = self.read_int32()
-        self.namespace = self.read_arbitrary_string()
-        self.relation_name = self.read_arbitrary_string()
+        self.namespace = self.read_string()
+        self.relation_name = self.read_string()
         self.replica_identity_setting = self.read_utf8()
         self.n_columns = self.read_int16()
         self.columns = list()
 
         for column in range(self.n_columns):
             part_of_pkey = self.read_int8()
-            col_name = self.read_arbitrary_string()
+            col_name = self.read_string()
             data_type_id = self.read_int32()
             # TODO: check on use of signed / unsigned
             # check with select oid from pg_type where typname = <type>; timestamp == 1184, int4 = 23
@@ -246,7 +227,6 @@ class Relation(PgoutputMessage):
                f",\n\tnamespace/schema : '{self.namespace}',\n\trelation_name : '{self.relation_name}'" \
                f",\n\treplica_identity_setting : '{self.replica_identity_setting}',\n\tn_columns : {self.n_columns} " \
                f",\n\tcolumns : {self.columns}"
-
 
 
 class PgType:

@@ -15,8 +15,7 @@ def test_relation_message():
     assert len(decoded_msg.columns) == 2
     # (pk flag, col name, pg_type oid, atttypmod)
     assert decoded_msg.columns[0] == (1, "id", 23, -1) # is pk
-    assert decoded_msg.columns[1] == (0, "created", 1184, -1) 
-
+    assert decoded_msg.columns[1] == (0, "created", 1184, -1)
 
 def test_begin_message():
     message = b'B\x00\x00\x00\x00\x01f4\x98\x00\x02ck\xd8i\x8a1\x00\x00\x01\xeb'
@@ -25,7 +24,6 @@ def test_begin_message():
     assert decoded_msg.final_tx_lsn == 23475352
     assert decoded_msg.tx_xid == 491
     assert decoded_msg.commit_tx_ts == datetime.strptime("2021-04-20 22:13:16.867121+00:00".split('+')[0], "%Y-%m-%d %H:%M:%S.%f").astimezone(timezone.utc)
-
     
 def test_insert_message():
     message = b'I\x00\x00@\x01N\x00\x02t\x00\x00\x00\x015t\x00\x00\x00\x162012-01-01 12:00:00+00'
@@ -62,3 +60,10 @@ def test_commit_message():
     assert decoded_msg.final_tx_lsn == 23475400
     assert decoded_msg.commit_tx_ts == datetime.strptime("2021-04-20 23:01:08.279969+00:00".split('+')[0], "%Y-%m-%d %H:%M:%S.%f").astimezone(timezone.utc)
 
+def test_truncate_message():
+    message = b'T\x00\x00\x00\x01\x00\x00\x00@\x01'
+    decoded_msg = decoders.Truncate(message)
+    assert decoded_msg.byte1 == "T"
+    assert decoded_msg.number_of_relations == 1
+    assert decoded_msg.relation_ids == [16385]
+    assert decoded_msg.option_bits == 0

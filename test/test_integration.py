@@ -6,7 +6,7 @@ TEST_DIR = "test_output_files"
 # files have been produced by get_replication_records.py
 # file name schem: {lsn}_{message_type.lower()}
 with open(f"{TEST_DIR}/manifest", "r") as f:
-    test_files = (f.read()).split("\n")[:-1]
+    test_files = [x for x in set((f.read()).split("\n")[:-1])]
 
 
 def test_decode_all_messages():
@@ -27,18 +27,22 @@ def test_decoded_message_contents():
     DELETE FROM test_table where id = 4;
     COMMIT;
     """
+    checked_files = []
+    test_files.sort(key=lambda x: x.split("_")[2])
 
     # get relation message for the id
-    with open(f"{TEST_DIR}/0_r", "rb") as f:
-        relation_message = decoders.decode_message(f.read())
-    
-    assert relation_message.namespace == 'public'
-    assert relation_message.relation_name == 'test_table'
+    relation_file = [f for f in test_files if "r" in f][0]
+    with open(f"{TEST_DIR}/{relation_file}", "rb") as f:
+        relation_message = decoders.decode_message(f.read())    
+        assert relation_message.namespace == 'public'
+        assert relation_message.relation_name == 'test_table'
+        checked_files.append(relation_file)
 
-    begin_file_name = min([x for x in test_files if x[-1] == "b" ])
+    begin_file_name = min([f for f in test_files if "b" in f and f not in checked_files])
     with open(f"{TEST_DIR}/{begin_file_name}", "rb") as f:
         begin_message = decoders.decode_message(f.read())
         assert begin_message.byte1 == "B"
+        checked_files.append(begin_file_name)
 
     expected = [
         {"type": "I", "id": "4", "created": "2011-01-01 12:00:00+00"},
@@ -47,7 +51,7 @@ def test_decoded_message_contents():
         {"type": "U", "id": "5", "created": "2013-01-01 12:00:00+00"},
         {"type": "D", "id": "4", "created": "2011-01-01 12:00:00+00"},
     ]
-    for idx, raw_msg in enumerate(sorted(t for t in test_files if t[-1] in ["i", "u", "d"])):
+    for idx, raw_msg in enumerate(f for f in test_files if f.split("_")[1] in ["i", "u", "d"] and f not in checked_files):
         with open(f"{TEST_DIR}/{raw_msg}", "rb") as f:
             decoded_msg = decoders.decode_message(f.read())
             decoded_msg.relation_id == relation_message.relation_id
@@ -71,10 +75,19 @@ def test_decoded_message_contents():
                 else: # == "O"
                     # Identifies the following TupleData message as a old tuple. This field is present if the table in which the delete has happened has REPLICA IDENTITY set to FULL.
                     pass
+            checked_files.append(raw_msg)
             
-    commit_file_name = min([x for x in test_files if x[-1] == "c" ])
+    commit_file_name = min([f for f in test_files if "c" in f and f not in checked_files])
     with open(f"{TEST_DIR}/{commit_file_name}", "rb") as f:
         decoded_msg = decoders.decode_message(f.read())
         assert decoded_msg.byte1 == "C"
         assert decoded_msg.lsn_commit == begin_message.final_tx_lsn
         assert decoded_msg.commit_tx_ts == begin_message.commit_tx_ts
+        checked_files.append(commit_file_name)
+
+    files_to_check = [f for f in test_files if f not in checked_files]
+    for msg in files_to_check:
+        with open(f"{TEST_DIR}/{msg}", "rb") as f:
+            raw_msg = f.read()
+            msg = decoders.decode_message(raw_msg)
+  

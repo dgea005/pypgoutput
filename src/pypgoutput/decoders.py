@@ -2,11 +2,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import io
-from typing import Tuple, Union, Optional, List, NamedTuple
+from typing import Tuple, Union, Optional, List
 
 
 # Byte lengths
-CHAR = 1
 INT8 = 1
 INT16 = 2
 INT32 = 4
@@ -27,7 +26,7 @@ def convert_bytes_to_utf8(_in_bytes: bytes) -> str:
 
 @dataclass(frozen=True)
 class ColumnData:
-    # This is NOT the type. it means null value/toasted(not sent)/text formatted
+    # col_data_category is NOT the type. it means null value/toasted(not sent)/text formatted
     col_data_category: Optional[str] 
     col_data_length: Optional[int] = None
     col_data: Optional[str] = None
@@ -249,9 +248,11 @@ class Relation(PgoutputMessage):
                f",\n\tcolumns : {self.columns}"
 
 
-# renamed to PgType to not use "type" name
+
 class PgType:
     """
+    Renamed to PgType not to collide with "type"
+
     Byte1('Y') Identifies the message as a type message.
     Int32 ID of the data type.
     String Namespace (empty string for pg_catalog).
@@ -376,7 +377,7 @@ class Truncate(PgoutputMessage):
         if self.byte1 != 'T':
             raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
         self.number_of_relations = self.read_int32()
-        self.option_bits = self.read_utf8()
+        self.option_bits = self.read_int8()
         self.relation_ids = []
         for relation in range(self.number_of_relations):
             self.relation_ids.append(self.read_int32())

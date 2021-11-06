@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import shutil
 import sys
@@ -10,7 +11,8 @@ LOCAL_DSN = "host=localhost user=test port=5432 dbname=test password=test"
 
 
 def write_raw_test_file(lsn, message_type, payload, parent_dir=TEST_DIR):
-    file_name = f"{lsn}_{message_type.lower()}"
+    timestamp = int(datetime.now().timestamp())
+    file_name = f"{timestamp}_{message_type.lower()}_{lsn}"
     with open(f"{parent_dir}/{file_name}", 'wb') as f:
         f.write(payload)
     with open(f"{parent_dir}/manifest", "a") as manifest:

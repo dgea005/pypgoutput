@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import io
-from typing import Tuple, Union, Optional, List
+from typing import Union, Optional, List
 
 
 # integer byte lengths
@@ -29,6 +29,14 @@ class ColumnData:
     col_data_category: Optional[str] 
     col_data_length: Optional[int] = None
     col_data: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ColumnType:
+    part_of_pkey: int
+    name: str
+    type_id: int
+    atttypmod: int
 
 
 @dataclass(frozen=True)
@@ -201,7 +209,7 @@ class Relation(PgoutputMessage):
     replica_identity_setting: str
     n_columns: int
     # TODO define column type, could eventually look this up from the DB
-    columns: List[Tuple[int, str, int, int]] 
+    columns: List[ColumnType] 
 
     def decode_buffer(self):
         if self.byte1 != 'R':
@@ -219,8 +227,15 @@ class Relation(PgoutputMessage):
             data_type_id = self.read_int32()
             # TODO: check on use of signed / unsigned
             # check with select oid from pg_type where typname = <type>; timestamp == 1184, int4 = 23
-            col_modifier = self.read_int32()          
-            self.columns.append((part_of_pkey, col_name, data_type_id, col_modifier))
+            col_modifier = self.read_int32()        
+            self.columns.append(
+                ColumnType(
+                    part_of_pkey=part_of_pkey, 
+                    name=col_name, 
+                    type_id=data_type_id, 
+                    atttypmod=col_modifier
+                )
+            )
 
     def __repr__(self):
         return f"RELATION \n\tbyte1 : '{self.byte1}', \n\trelation_id : {self.relation_id}" \

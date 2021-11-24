@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from pypgoutput import decoders, ColumnData
+from pypgoutput import decoders, ColumnData, ColumnType
 
 
 def test_relation_message():
@@ -14,8 +14,8 @@ def test_relation_message():
     assert type(decoded_msg.columns) == list
     assert len(decoded_msg.columns) == 2
     # (pk flag, col name, pg_type oid, atttypmod)
-    assert decoded_msg.columns[0] == (1, "id", 23, -1) # is pk
-    assert decoded_msg.columns[1] == (0, "created", 1184, -1)
+    assert decoded_msg.columns[0] == ColumnType(1, "id", 23, -1) # is pk
+    assert decoded_msg.columns[1] == ColumnType(0, "created", 1184, -1)
 
 def test_begin_message():
     message = b'B\x00\x00\x00\x00\x01f4\x98\x00\x02ck\xd8i\x8a1\x00\x00\x01\xeb'

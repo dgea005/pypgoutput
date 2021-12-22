@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
+import logging
 import io
 from typing import Union, Optional, List
 
@@ -11,13 +12,14 @@ INT16 = 2
 INT32 = 4
 INT64 = 8
 
+logger = logging.getLogger(__name__)
 
 def convert_pg_ts(_ts_in_microseconds: int) -> datetime:
-    ts = datetime(2000, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc) 
+    ts = datetime(2000, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc)
     return ts + timedelta(microseconds=_ts_in_microseconds)
 
 def convert_bytes_to_int(_in_bytes: bytes) -> int:
-    return int.from_bytes(_in_bytes, byteorder='big', signed=True)    
+    return int.from_bytes(_in_bytes, byteorder='big', signed=True)
 
 def convert_bytes_to_utf8(_in_bytes: Union[bytes, bytearray]) -> str:
     return (_in_bytes).decode('utf-8')
@@ -26,13 +28,15 @@ def convert_bytes_to_utf8(_in_bytes: Union[bytes, bytearray]) -> str:
 @dataclass(frozen=True)
 class ColumnData:
     # col_data_category is NOT the type. it means null value/toasted(not sent)/text formatted
-    col_data_category: Optional[str] 
+    col_data_category: Optional[str]
     col_data_length: Optional[int] = None
     col_data: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class ColumnType:
+    """ https://www.postgresql.org/docs/12/catalog-pg-attribute.html
+    """
     part_of_pkey: int
     name: str
     type_id: int
@@ -69,10 +73,10 @@ class PgoutputMessage(ABC):
         return convert_bytes_to_int(self.buffer.read(INT16))
 
     def read_int32(self) -> int:
-        return convert_bytes_to_int(self.buffer.read(INT32)) 
+        return convert_bytes_to_int(self.buffer.read(INT32))
 
     def read_int64(self) -> int:
-        return convert_bytes_to_int(self.buffer.read(INT64)) 
+        return convert_bytes_to_int(self.buffer.read(INT64))
 
     def read_utf8(self, n: int = 1) -> str:
         return convert_bytes_to_utf8(self.buffer.read(n))
@@ -89,7 +93,7 @@ class PgoutputMessage(ABC):
 
     def read_tuple_data(self) -> TupleData:
         """
-        TupleData 
+        TupleData
         Int16  Number of columns.
         Next, one of the following submessages appears for each column (except generated columns):
                 Byte1('n') Identifies the data as NULL value.
@@ -124,26 +128,26 @@ class Begin(PgoutputMessage):
     https://www.postgresql.org/docs/14/datatype-pg-lsn.html
 
     byte1 Byte1('B') Identifies the message as a begin message.
-    final_tx_lsn Int64 The final LSN of the transaction.
+    lsn Int64 The final LSN of the transaction.
     commit_tx_ts Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     tx_xid Int32 Xid of the transaction.
     """
     byte1: str
-    final_tx_lsn: int
-    commit_tx_ts: datetime
+    lsn: int
+    commit_ts: datetime
     tx_xid: int
 
     def decode_buffer(self):
         if self.byte1 != 'B':
             raise Exception('first byte in buffer does not match Begin message')
-        self.final_tx_lsn = self.read_int64() 
-        self.commit_tx_ts = self.read_timestamp()
+        self.lsn = self.read_int64()
+        self.commit_ts = self.read_timestamp()
         self.tx_xid = self.read_int64()
         return self
 
     def __repr__(self):
-        return f"BEGIN \n\tbyte1: '{self.byte1}', \n\tfinal_tx_lsn : {self.final_tx_lsn}, " \
-               f"\n\tcommit_tx_ts {self.commit_tx_ts}, \n\ttx_xid : {self.tx_xid}"
+        return f"BEGIN \n\tbyte1: '{self.byte1}', \n\tLSN : {self.lsn}, "\
+               f"\n\tcommit_ts {self.commit_ts}, \n\ttx_xid : {self.tx_xid}"
 
 
 class Commit(PgoutputMessage):
@@ -151,27 +155,27 @@ class Commit(PgoutputMessage):
     byte1: Byte1('C') Identifies the message as a commit message.
     flags: Int8 Flags; currently unused (must be 0).
     lsn_commit: Int64 The LSN of the commit.
-    final_tx_lsn: Int64 The end LSN of the transaction.
+    lsn: Int64 The end LSN of the transaction.
     Int64 Commit timestamp of the transaction. The value is in number of microseconds since PostgreSQL epoch (2000-01-01).
     """
     byte1: str
     flags: int
     lsn_commit: int
-    final_tx_lsn: int
-    commit_tx_ts: datetime
+    lsn: int
+    commit_ts: datetime
 
     def decode_buffer(self):
         if self.byte1 != 'C':
             raise Exception('first byte in buffer does not match Commit message')
         self.flags = self.read_utf8()
         self.lsn_commit = self.read_int64()
-        self.final_tx_lsn = self.read_int64()
-        self.commit_tx_ts = self.read_timestamp()
+        self.lsn = self.read_int64()
+        self.commit_ts = self.read_timestamp()
         return self
 
     def __repr__(self):
         return f"COMMIT \n\tbyte1: {self.byte1}, \n\tflags {self.flags}, \n\tlsn_commit : {self.lsn_commit} " \
-               f"\n\tfinal_tx_lsn : {self.final_tx_lsn}, \n\tcommit_tx_ts {self.commit_tx_ts}"     
+               f"\n\tLSN : {self.lsn}, \n\tcommit_ts {self.commit_ts}"
 
 
 class Origin:
@@ -194,7 +198,7 @@ class Relation(PgoutputMessage):
     Int8 Replica identity setting for the relation (same as relreplident in pg_class).
         # select relreplident from pg_class where relname = 'test_table';
         # from reading the documentation and looking at the tables this is not int8 but a single character
-        # background: https://www.postgresql.org/docs/10/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY 
+        # background: https://www.postgresql.org/docs/10/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY
     Int16 Number of columns.
     Next, the following message part appears for each column (except generated columns):
         Int8 Flags for the column. Currently can be either 0 for no flags or 1 which marks the column as part of the key.
@@ -209,7 +213,7 @@ class Relation(PgoutputMessage):
     replica_identity_setting: str
     n_columns: int
     # TODO define column type, could eventually look this up from the DB
-    columns: List[ColumnType] 
+    columns: List[ColumnType]
 
     def decode_buffer(self):
         if self.byte1 != 'R':
@@ -227,12 +231,12 @@ class Relation(PgoutputMessage):
             data_type_id = self.read_int32()
             # TODO: check on use of signed / unsigned
             # check with select oid from pg_type where typname = <type>; timestamp == 1184, int4 = 23
-            col_modifier = self.read_int32()        
+            col_modifier = self.read_int32()
             self.columns.append(
                 ColumnType(
-                    part_of_pkey=part_of_pkey, 
-                    name=col_name, 
-                    type_id=data_type_id, 
+                    part_of_pkey=part_of_pkey,
+                    name=col_name,
+                    type_id=data_type_id,
                     atttypmod=col_modifier
                 )
             )
@@ -265,7 +269,7 @@ class Insert(PgoutputMessage):
     """
     byte1: str
     relation_id: int
-    new_tuple_byte: str 
+    new_tuple_byte: str
     new_tuple: TupleData
 
     def decode_buffer(self):
@@ -345,7 +349,7 @@ class Delete(PgoutputMessage):
         if self.byte1 != 'D':
             raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
         self.relation_id = self.read_int32()
-        self.message_type = self.read_utf8() 
+        self.message_type = self.read_utf8()
         if self.message_type not in ['K','O']:
             raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
         self.old_tuple = self.read_tuple_data()
@@ -388,7 +392,7 @@ def decode_message(_input_bytes: bytes) -> Optional[Union[Begin, Commit, Relatio
     if first_byte == 'B':
         output = Begin(_input_bytes)
     elif first_byte == "C":
-        output = Commit(_input_bytes)   
+        output = Commit(_input_bytes)
     elif first_byte == "R":
         output = Relation(_input_bytes)
     elif first_byte == "I":
@@ -400,6 +404,6 @@ def decode_message(_input_bytes: bytes) -> Optional[Union[Begin, Commit, Relatio
     elif first_byte == 'T':
         output = Truncate(_input_bytes)
     else:
-        print(f"warning unrecognised message {_input_bytes}")
+        logger.error(f"warning unrecognised message {_input_bytes}")
         output = None
     return output

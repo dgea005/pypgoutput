@@ -76,7 +76,7 @@ def test_decoded_message_contents():
                     # Identifies the following TupleData message as a old tuple. This field is present if the table in which the delete has happened has REPLICA IDENTITY set to FULL.
                     pass
             checked_files.append(raw_msg)
-            
+
     commit_file_name = min([f for f in test_files if "c" in f and f not in checked_files])
     with open(f"{TEST_DIR}/{commit_file_name}", "rb") as f:
         decoded_msg = decoders.decode_message(f.read())
@@ -90,4 +90,3 @@ def test_decoded_message_contents():
         with open(f"{TEST_DIR}/{msg}", "rb") as f:
             raw_msg = f.read()
             msg = decoders.decode_message(raw_msg)
-  

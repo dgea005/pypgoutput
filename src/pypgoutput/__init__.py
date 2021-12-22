@@ -11,3 +11,4 @@ from pypgoutput.decoders import Truncate
 from pypgoutput.decoders import decode_message
 from pypgoutput.decoders import ColumnData
 from pypgoutput.decoders import ColumnType
+from pypgoutput.utils import SourceDBHandler, convert_string_to_type, convert_raw_to_change_events

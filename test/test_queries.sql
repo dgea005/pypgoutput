@@ -16,6 +16,9 @@ UPDATE test set id=7 WHERE id = 5 ;
 DELETE FROM test where id = 4;
 COMMIT;
 
+BEGIN;
+INSERT INTO test (id) SELECT x  FROM generate_series(1000, 1005) AS x;
+COMMIT;
 
 -- BEGIN;
 -- TRUNCATE test_table;

@@ -23,4 +23,4 @@ done
 
 psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a --file=test_queries.sql
 sleep 1
-python pipe_test.py
+python example_script.py

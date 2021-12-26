@@ -11,13 +11,5 @@ setup:
 	python3 -m venv test-env
 	source test-env/bin/activate && pip install -r requirements.txt
 
-test-all:
+unit-test:
 	source test-env/bin/activate && pytest -svx test_unit.py
-	bash ./run_integration_tests.sh
-
-test-unit:
-	source test-env/bin/activate && pytest -svx test_unit.py
-
-test-integration:
-	bash ./run_integration_tests.sh
-

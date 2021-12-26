@@ -20,10 +20,7 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
 done
 
 # Start script to create individual binary files of pgoutput records
-nohup python get_replication_records.py &
 
 psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a --file=test_queries.sql
-
 sleep 1
-
-pytest -svx test_integration.py
+python example_script.py

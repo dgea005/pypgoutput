@@ -1,11 +1,3 @@
-"""
-Pass data from LogicalStreamConsumer to processor with a pipe
-
-Interface of multiprocessing connection
-https://docs.python.org/3/library/multiprocessing.html#multiprocessing.connection.Connection
-https://www.educative.io/edpresso/pipes-queues-and-lock-in-multiprocessing-in-python
-
-"""
 import json
 import logging
 import pypgoutput

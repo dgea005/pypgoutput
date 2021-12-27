@@ -1,4 +1,4 @@
-# py-pgoutput reader
+# py-pgoutput
 
 Decodes messages from the pgoutput Postgres plugin.
 

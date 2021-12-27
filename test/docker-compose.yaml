@@ -1,11 +1,10 @@
 version: '3'
 services:
-
   database:
-    image: "postgres:12.3" 
-    ports: 
+    image: "postgres:12.3"
+    ports:
       - 5432:5432
-    environment: 
+    environment:
       POSTGRES_PASSWORD: test
       POSTGRES_USER: test
       POSTGRES_DB: test

@@ -26,8 +26,8 @@ def test_begin_message():
     assert decoded_msg.lsn == 23475352
     assert decoded_msg.tx_xid == 491
     assert decoded_msg.commit_ts == datetime.strptime(
-        "2021-04-20 22:13:16.867121+00:00".split("+")[0], "%Y-%m-%d %H:%M:%S.%f"
-    ).astimezone(timezone.utc)
+        "2021-04-20 20:13:16.867121+00:00".split("+")[0], "%Y-%m-%d %H:%M:%S.%f"
+    ).replace(tzinfo=timezone.utc)
 
 
 def test_insert_message():
@@ -67,8 +67,8 @@ def test_commit_message():
     assert decoded_msg.lsn_commit == 23475352
     assert decoded_msg.lsn == 23475400
     assert decoded_msg.commit_ts == datetime.strptime(
-        "2021-04-20 23:01:08.279969+00:00".split("+")[0], "%Y-%m-%d %H:%M:%S.%f"
-    ).astimezone(timezone.utc)
+        "2021-04-20 21:01:08.279969+00:00".split("+")[0], "%Y-%m-%d %H:%M:%S.%f"
+    ).replace(tzinfo=timezone.utc)
 
 
 def test_truncate_message():

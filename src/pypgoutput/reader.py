@@ -1,16 +1,16 @@
-from collections import OrderedDict
 import logging
 import multiprocessing
+import time
+import uuid
+from collections import OrderedDict
 from multiprocessing.connection import Connection
 from multiprocessing.context import Process
-import time
 from typing import Dict, Generator
-import uuid
 
 import psycopg2
 import psycopg2.extras
 
-from pypgoutput import decode_message, TupleData, SourceDBHandler
+from pypgoutput import SourceDBHandler, TupleData, decode_message
 
 logger = logging.getLogger(__name__)
 

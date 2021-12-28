@@ -1,10 +1,9 @@
+import io
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-import logging
-import io
-from typing import Union, Optional, List
-
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Union
 
 # integer byte lengths
 INT8 = 1

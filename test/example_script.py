@@ -1,5 +1,6 @@
 import json
 import logging
+
 import pypgoutput
 
 logger = logging.getLogger(__name__)

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from pypgoutput import decoders, ColumnData, ColumnType
+
+from pypgoutput import ColumnData, ColumnType, decoders
 
 
 def test_relation_message():

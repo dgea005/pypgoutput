@@ -3,13 +3,16 @@ SHELL := /bin/bash
 .EXPORT_ALL_VARIABLES:
 PIP_REQUIRE_VIRTUALENV = true
 
+# INSTALL_STAMP is from here
+# https://blog.mathieu-leplatre.info/tips-for-your-makefile-with-python.html
+
 VENV?=test/test-env
 INSTALL_STAMP := $(VENV)/.install.stamp
 PYTHON=${VENV}/bin/python3
 
-venv: ${VENV}/bin/activate
+venv: $(INSTALL_STAMP)
 
-$(VENV)/bin/activate: setup.py test/requirements-dev.txt
+$(INSTALL_STAMP): setup.py test/requirements-dev.txt
 	if [ ! -d $(VENV) ]; then python3 -m venv $(VENV); fi
 	${PYTHON} -m pip install --upgrade pip
 	${PYTHON} -m pip install -r test/requirements-dev.txt

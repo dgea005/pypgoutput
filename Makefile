@@ -32,8 +32,9 @@ check-format: venv
 format: venv
 	${PYTHON} -m black -t py38 ./src
 
+.PHONY: lint
 lint: venv
-	${PYTHON} -m flake8 ./src;
+	${PYTHON} -m flake8 --ignore=W503,E501 ./src;
 
 .PHONY: clean
 clean:

@@ -1,10 +1,9 @@
+import io
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
-import logging
-import io
-from typing import Union, Optional, List
-
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Union
 
 # integer byte lengths
 INT8 = 1
@@ -295,9 +294,7 @@ class Insert(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "I":
-            raise Exception(
-                f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'"
-            )
+            raise Exception(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         self.new_tuple_byte = self.read_utf8()
         self.new_tuple = self.read_tuple_data()
@@ -335,9 +332,7 @@ class Update(PgoutputMessage):
         self.optional_tuple_identifier = None
         self.old_tuple = None
         if self.byte1 != "U":
-            raise Exception(
-                f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'"
-            )
+            raise Exception(f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         # TODO test update to PK, test update with REPLICA IDENTITY = FULL
         self.next_byte_identifier = self.read_utf8()  # one of K, O or N
@@ -380,15 +375,11 @@ class Delete(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "D":
-            raise Exception(
-                f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'"
-            )
+            raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         self.message_type = self.read_utf8()
         if self.message_type not in ["K", "O"]:
-            raise Exception(
-                f"message type byte is not 'K' or 'O', got : '{self.message_type}'"
-            )
+            raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
         self.old_tuple = self.read_tuple_data()
         return self
 
@@ -414,9 +405,7 @@ class Truncate(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "T":
-            raise Exception(
-                f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'"
-            )
+            raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
         self.number_of_relations = self.read_int32()
         self.option_bits = self.read_int8()
         self.relation_ids = []

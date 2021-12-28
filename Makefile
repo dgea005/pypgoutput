@@ -6,7 +6,7 @@ PIP_REQUIRE_VIRTUALENV = true
 # INSTALL_STAMP is from here
 # https://blog.mathieu-leplatre.info/tips-for-your-makefile-with-python.html
 
-VENV?=test/test-env
+VENV?=dev-venv
 INSTALL_STAMP := $(VENV)/.install.stamp
 PYTHON=${VENV}/bin/python3
 
@@ -25,16 +25,16 @@ test: venv
 
 .PHONY: check-format
 check-format: venv
-	${PYTHON} -m black -t py38 --check ./src
-
+	${PYTHON} -m black --config=pyproject.toml --check src/ test/
 
 .PHONY: format
 format: venv
-	${PYTHON} -m black -t py38 ./src
+	${PYTHON} -m black --config=pyproject.toml src/ test/
 
 .PHONY: lint
 lint: venv
-	${PYTHON} -m flake8 --ignore=W503,E501 ./src;
+	${PYTHON} -m flake8 --ignore=W503,E501 src/ test/
+	${PYTHON} -m isort src/ test/
 
 .PHONY: clean
 clean:

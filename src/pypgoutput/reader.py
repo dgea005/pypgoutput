@@ -25,6 +25,7 @@ class LogicalReplicationReader:
         b. Pass decoded message into transform function that produces change events with additional metadata cached in
            from previous messages and by looking up values in the source DBs catalog
     """
+
     def __init__(self, db_name: str, db_dsn: str, slot_name: str) -> None:
         self.db_name = db_name
         self.db_dsn = db_dsn
@@ -35,9 +36,7 @@ class LogicalReplicationReader:
     def setup(self):
         self.pipe_out_conn, self.pipe_in_conn = multiprocessing.Pipe(duplex=True)
         self.extractor = ExtractRaw(
-            pipe_conn=self.pipe_in_conn,
-            db_dsn=self.db_dsn,
-            slot_name=self.slot_name
+            pipe_conn=self.pipe_in_conn, db_dsn=self.db_dsn, slot_name=self.slot_name
         )
         self.extractor.start()
         # TODO: make some aspect of this output configurable
@@ -45,12 +44,11 @@ class LogicalReplicationReader:
         self.transformed_msgs = transform_raw_to_change_event(
             message_stream=self.raw_msgs,
             source_dsn=self.db_dsn,
-            source_db_name=self.db_name
+            source_db_name=self.db_name,
         )
 
     def stop(self):
-        """ Stop reader process and close the pipe
-        """
+        """Stop reader process and close the pipe"""
         self.extractor.terminate()
         time.sleep(0.1)
         self.extractor.close()
@@ -58,8 +56,7 @@ class LogicalReplicationReader:
         self.pipe_in_conn.close()
 
     def read_raw_extracted(self):
-        """ yield messages from the pipe populated by extractor
-        """
+        """yield messages from the pipe populated by extractor"""
         empty_count = 0
         iter_count = 0
         msg_count = 0
@@ -72,7 +69,9 @@ class LogicalReplicationReader:
                 yield item
                 self.pipe_out_conn.send({"id": item["message_id"]})
             if iter_count % 50 == 0:
-                logger.info(f"pipe poll count: {iter_count}, messages processed: {msg_count}")
+                logger.info(
+                    f"pipe poll count: {iter_count}, messages processed: {msg_count}"
+                )
             iter_count += 1
 
     def __iter__(self):
@@ -82,7 +81,7 @@ class LogicalReplicationReader:
         try:
             return next(self.transformed_msgs)
         except Exception as err:
-            self.stop() # try to close everything
+            self.stop()  # try to close everything
             logger.error(f"Error extracting LR logs: {err}")
             raise StopIteration from err
 
@@ -104,14 +103,20 @@ class ExtractRaw(Process):
         self.slot_name = slot_name
 
     def run(self) -> None:
-        conn = psycopg2.connect(self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
+        conn = psycopg2.connect(
+            self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection
+        )
         cur = conn.cursor()
-        replication_options = {'publication_names': 'pub', 'proto_version': '1'}
+        replication_options = {"publication_names": "pub", "proto_version": "1"}
         try:
-            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
+            cur.start_replication(
+                slot_name=self.slot_name, decode=False, options=replication_options
+            )
         except psycopg2.ProgrammingError:
-            cur.create_replication_slot(self.slot_name, output_plugin='pgoutput')
-            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
+            cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
+            cur.start_replication(
+                slot_name=self.slot_name, decode=False, options=replication_options
+            )
         try:
             cur.consume_stream(self.msg_consumer)
         except Exception as err:
@@ -123,32 +128,34 @@ class ExtractRaw(Process):
         message_id = uuid.uuid4()
         # TODO create a type for this dictionary with defined fields
         message = {
-            "message_id":message_id,
+            "message_id": message_id,
             "data_start": msg.data_start,
             "payload": msg.payload,
             "send_time": msg.send_time,
             "data_size": msg.data_size,
-            "wal_end": msg.wal_end
+            "wal_end": msg.wal_end,
         }
         self.pipe_conn.send(message)
 
-        result = self.pipe_conn.recv() # how would this wait until processing is done?
+        result = self.pipe_conn.recv()  # how would this wait until processing is done?
         if result["id"] == message_id:
             msg.cursor.send_feedback(flush_lsn=msg.data_start)
             logger.debug(f"Flushed message: '{str(message_id)}'")
         else:
-            logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}")
+            logger.warning(
+                f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}"
+            )
 
 
 def prepare_base_change_event(
-        op: str,
-        relation_id: int,
-        table_metadata: dict,
-        transaction_metadata: dict,
-        lsn: int,
-        message_id: uuid.uuid4
-    ) -> dict:
-    """ Construct payload dict of change event for I, U, D, T events
+    op: str,
+    relation_id: int,
+    table_metadata: dict,
+    transaction_metadata: dict,
+    lsn: int,
+    message_id: uuid.uuid4,
+) -> dict:
+    """Construct payload dict of change event for I, U, D, T events
     TODO: define type for this that can be serialised to desired format. E.g. JSON
     """
     payload = {}
@@ -162,7 +169,7 @@ def prepare_base_change_event(
         "tx_id": transaction_metadata["tx_xid"],
         "begin_lsn": transaction_metadata["begin_lsn"],
         "commit_ts": transaction_metadata["commit_ts"],
-        "lsn": lsn
+        "lsn": lsn,
     }
     payload["table_schema"] = table_metadata["column_definitions"]
     return payload
@@ -178,11 +185,9 @@ def map_tuple_to_dict(tuple_data: TupleData, relation: dict) -> OrderedDict:
 
 
 def transform_raw_to_change_event(
-        message_stream: Generator[Dict, None, None],
-        source_dsn: str,
-        source_db_name: str
-    ) -> Generator[Dict, None, None]:
-    """ Convert raw messages to change events
+    message_stream: Generator[Dict, None, None], source_dsn: str, source_db_name: str
+) -> Generator[Dict, None, None]:
+    """Convert raw messages to change events
 
     Replication protocol https://www.postgresql.org/docs/12/protocol-logical-replication.html
 
@@ -209,22 +214,26 @@ def transform_raw_to_change_event(
                 "column_definitions": [],
                 "db": source_db_name,
                 "schema": decoded_msg.namespace,
-                "table": decoded_msg.relation_name
+                "table": decoded_msg.relation_name,
             }
             for column in decoded_msg.columns:
-                pg_types[column.type_id] = source_handler.fetch_column_type(type_id=column.type_id, atttypmod=column.atttypmod)
+                pg_types[column.type_id] = source_handler.fetch_column_type(
+                    type_id=column.type_id, atttypmod=column.atttypmod
+                )
                 # pre-compute schema for attaching to messages
-                table_schemas[relation_id]["column_definitions"].append({
-                    "name": column.name,
-                    "part_of_pkey": column.part_of_pkey,
-                    "type_id": column.type_id,
-                    "type": pg_types[column.type_id],
-                    "optional": source_handler.fetch_if_column_is_optional(
-                        table_schema=decoded_msg.namespace,
-                        table_name=decoded_msg.relation_name,
-                        column_name=column.name
-                    )
-                })
+                table_schemas[relation_id]["column_definitions"].append(
+                    {
+                        "name": column.name,
+                        "part_of_pkey": column.part_of_pkey,
+                        "type_id": column.type_id,
+                        "type": pg_types[column.type_id],
+                        "optional": source_handler.fetch_if_column_is_optional(
+                            table_schema=decoded_msg.namespace,
+                            table_name=decoded_msg.relation_name,
+                            column_name=column.name,
+                        ),
+                    }
+                )
         elif decoded_msg.byte1 == "B":
             # overwrite transaction_metadata, once we reach next BEGIN the previous TX is processed
             transaction_metadata = {
@@ -240,15 +249,21 @@ def transform_raw_to_change_event(
                 table_metadata=table_schemas[relation_id],
                 transaction_metadata=transaction_metadata,
                 lsn=msg["data_start"],
-                message_id=msg["message_id"]
+                message_id=msg["message_id"],
             )
             before = None
             if decoded_msg.byte1 in ("U", "D"):
                 if decoded_msg.old_tuple:
-                    before = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=table_schemas[decoded_msg.relation_id])
+                    before = map_tuple_to_dict(
+                        tuple_data=decoded_msg.old_tuple,
+                        relation=table_schemas[decoded_msg.relation_id],
+                    )
             after = None
             if decoded_msg.byte1 != "D":
-                after = map_tuple_to_dict(tuple_data=decoded_msg.new_tuple, relation=table_schemas[decoded_msg.relation_id])
+                after = map_tuple_to_dict(
+                    tuple_data=decoded_msg.new_tuple,
+                    relation=table_schemas[decoded_msg.relation_id],
+                )
 
             payload["before"] = before
             payload["after"] = after
@@ -262,7 +277,7 @@ def transform_raw_to_change_event(
                     table_metadata=table_schemas[rel_id],
                     transaction_metadata=transaction_metadata,
                     lsn=msg["data_start"],
-                    message_id=msg["message_id"]
+                    message_id=msg["message_id"],
                 )
                 payload["before"] = None
                 payload["after"] = None
@@ -270,4 +285,3 @@ def transform_raw_to_change_event(
 
         elif decoded_msg.byte1 == "C":
             transaction_metadata["processed"] = True
-

@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.1",
     author="Daniel Geals",
     author_email="danielgeals@gmail.com",
-    description="Read py-pgoutput messages",
+    description="pgoutput plugin message reader",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/dgea005/py-pgoutput",

@@ -6,7 +6,8 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-class SourceDBHandler():
+
+class SourceDBHandler:
     def __init__(self, dsn):
         self.dsn = dsn
 
@@ -34,15 +35,15 @@ class SourceDBHandler():
             raise Exception("Error running query") from err
 
     def fetch_column_type(self, type_id: int, atttypmod: int) -> str:
-        """ Get formatted data type name
-        """
+        """Get formatted data type name"""
         query = f"SELECT format_type({type_id}, {atttypmod}) AS data_type"
         result = self.fetchone(query=query)
         return result["data_type"]
 
-    def fetch_if_column_is_optional(self, table_schema: str, table_name: str, column_name: str) -> bool:
-        """ Check if a column is optional
-        """
+    def fetch_if_column_is_optional(
+        self, table_schema: str, table_name: str, column_name: str
+    ) -> bool:
+        """Check if a column is optional"""
         query = f"""SELECT attnotnull
             FROM pg_attribute
             WHERE attrelid = '{table_schema}.{table_name}'::regclass
@@ -50,7 +51,7 @@ class SourceDBHandler():
         """
         result = self.fetchone(query=query)
         # attnotnull returns if column has not null constraint, we want to flip it
-        return False  if result["attnotnull"] else True
+        return False if result["attnotnull"] else True
 
     def close(self):
         self.cur.close()
@@ -58,8 +59,7 @@ class SourceDBHandler():
 
 
 def convert_string_to_type(data_type, value):
-    """ eventually cast to text values to python types (for further serialisation) but not used yet
-    """
+    """eventually cast to text values to python types (for further serialisation) but not used yet"""
     if data_type == "integer":
         output = int(value)
     elif data_type == "bigint":
@@ -72,4 +72,3 @@ def convert_string_to_type(data_type, value):
 
         raise Exception(f"type not recognised: {data_type}")
     return output
-

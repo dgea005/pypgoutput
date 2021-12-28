@@ -11,14 +11,9 @@ from pypgoutput.decoders import (
     Truncate,
     decode_message,
     ColumnData,
-    ColumnType
+    ColumnType,
 )
 
-from pypgoutput.utils import (
-    SourceDBHandler,
-    convert_string_to_type
-)
+from pypgoutput.utils import SourceDBHandler, convert_string_to_type
 
-from pypgoutput.reader import (
-  LogicalReplicationReader
-)
+from pypgoutput.reader import LogicalReplicationReader

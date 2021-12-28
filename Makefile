@@ -28,6 +28,14 @@ check-format: venv
 	${PYTHON} -m black -t py38 --check ./src
 
 
+.PHONY: format
+format: venv
+	${PYTHON} -m black -t py38 ./src
+
+lint: venv
+	${PYTHON} -m flake8 ./src;
+
+.PHONY: clean
 clean:
 	rm -rf $(VENV)
 	find . -type f -name *.pyc -delete

@@ -12,31 +12,31 @@ PYTHON=${VENV}/bin/python3
 
 venv: $(INSTALL_STAMP)
 
-$(INSTALL_STAMP): setup.py test/requirements-dev.txt
+$(INSTALL_STAMP): setup.py tests/requirements-dev.txt
 	if [ ! -d $(VENV) ]; then python3 -m venv $(VENV); fi
 	${PYTHON} -m pip install --upgrade pip
-	${PYTHON} -m pip install -r test/requirements-dev.txt
+	${PYTHON} -m pip install -r tests/requirements-dev.txt
 	${PYTHON} -m pip install -e .
 	touch $(INSTALL_STAMP)
 
 .PHONY: test
 test: venv
-	${PYTHON} -m pytest -vv test/test_unit.py
+	${PYTHON} -m pytest -vv tests/test_unit.py
 
 .PHONY: check-format
 check-format: venv
-	${PYTHON} -m black --config=pyproject.toml --check src/ test/
+	${PYTHON} -m black --config=pyproject.toml --check src/ tests/
 
 .PHONY: format
 format: venv
-	${PYTHON} -m isort src/ test/
-	${PYTHON} -m black --config=pyproject.toml src/ test/
+	${PYTHON} -m isort src/ tests/
+	${PYTHON} -m black --config=pyproject.toml src/ tests/
 
 .PHONY: lint
 lint: venv
-	${PYTHON} -m flake8 --ignore=W503,E501 src/ test/
-	${PYTHON} -m isort src/ test/ --check-only
-	${PYTHON} -m black --config=pyproject.toml src/ test/ --check
+	${PYTHON} -m flake8 --ignore=W503,E501 src/ tests/
+	${PYTHON} -m isort src/ tests/ --check-only
+	${PYTHON} -m black --config=pyproject.toml src/ tests/ --check
 
 
 .PHONY: clean

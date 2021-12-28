@@ -25,12 +25,12 @@ test: venv
 
 .PHONY: check-format
 check-format: venv
-	${PYTHON} -m black -t py38 --check ./src
+	${PYTHON} -m black -t py38 --config=pyproject.toml --check src/ test/ --diff
 
 
 .PHONY: format
 format: venv
-	${PYTHON} -m black -t py38 ./src
+	${PYTHON} -m black -t py38  --config=pyproject.toml src/ test/
 
 .PHONY: lint
 lint: venv

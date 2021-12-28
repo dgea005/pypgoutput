@@ -5,7 +5,7 @@ import pypgoutput
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(relativeCreated)6d %(processName)s %(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(relativeCreated)6d %(processName)s %(message)s")
     SLOT_NAME = "my_slot"
     DB_NAME = "test"
     LOCAL_DSN = f"host=localhost user=test port=5432 dbname={DB_NAME} password=test"

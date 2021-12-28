@@ -35,9 +35,7 @@ class LogicalReplicationReader:
 
     def setup(self):
         self.pipe_out_conn, self.pipe_in_conn = multiprocessing.Pipe(duplex=True)
-        self.extractor = ExtractRaw(
-            pipe_conn=self.pipe_in_conn, db_dsn=self.db_dsn, slot_name=self.slot_name
-        )
+        self.extractor = ExtractRaw(pipe_conn=self.pipe_in_conn, db_dsn=self.db_dsn, slot_name=self.slot_name)
         self.extractor.start()
         # TODO: make some aspect of this output configurable
         self.raw_msgs = self.read_raw_extracted()
@@ -69,9 +67,7 @@ class LogicalReplicationReader:
                 yield item
                 self.pipe_out_conn.send({"id": item["message_id"]})
             if iter_count % 50 == 0:
-                logger.info(
-                    f"pipe poll count: {iter_count}, messages processed: {msg_count}"
-                )
+                logger.info(f"pipe poll count: {iter_count}, messages processed: {msg_count}")
             iter_count += 1
 
     def __iter__(self):
@@ -103,20 +99,14 @@ class ExtractRaw(Process):
         self.slot_name = slot_name
 
     def run(self) -> None:
-        conn = psycopg2.connect(
-            self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection
-        )
+        conn = psycopg2.connect(self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
         cur = conn.cursor()
         replication_options = {"publication_names": "pub", "proto_version": "1"}
         try:
-            cur.start_replication(
-                slot_name=self.slot_name, decode=False, options=replication_options
-            )
+            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         except psycopg2.ProgrammingError:
             cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
-            cur.start_replication(
-                slot_name=self.slot_name, decode=False, options=replication_options
-            )
+            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         try:
             cur.consume_stream(self.msg_consumer)
         except Exception as err:
@@ -142,9 +132,7 @@ class ExtractRaw(Process):
             msg.cursor.send_feedback(flush_lsn=msg.data_start)
             logger.debug(f"Flushed message: '{str(message_id)}'")
         else:
-            logger.warning(
-                f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}"
-            )
+            logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}")
 
 
 def prepare_base_change_event(

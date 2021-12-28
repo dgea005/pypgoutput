@@ -1,0 +1,35 @@
+
+[tool.black]
+line-length = 120
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+^/(
+  (
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | test/test-env
+    | build
+    | dist
+  )/
+  | foo.py           # also separately exclude a file named foo.py in
+                     # the root of the project
+)
+'''
+
+[tool.isort]
+profile = "black"
+src_paths = ["src"]
+combine_as_imports = true
+line_length = 120
+sections = [
+    'FUTURE',
+    'STDLIB',
+    'THIRDPARTY',
+    'FIRSTPARTY',
+    'LOCALFOLDER',
+]

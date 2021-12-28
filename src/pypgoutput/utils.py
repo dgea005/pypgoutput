@@ -40,9 +40,7 @@ class SourceDBHandler:
         result = self.fetchone(query=query)
         return result["data_type"]
 
-    def fetch_if_column_is_optional(
-        self, table_schema: str, table_name: str, column_name: str
-    ) -> bool:
+    def fetch_if_column_is_optional(self, table_schema: str, table_name: str, column_name: str) -> bool:
         """Check if a column is optional"""
         query = f"""SELECT attnotnull
             FROM pg_attribute

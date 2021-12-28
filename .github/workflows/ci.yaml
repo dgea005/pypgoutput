@@ -8,7 +8,7 @@ on:
       - master
 
 jobs:
-  lint:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -17,3 +17,5 @@ jobs:
           python-version: '3.8'
       - name: lint
         run: make lint
+      - name: test
+        run: make test

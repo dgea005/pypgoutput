@@ -29,12 +29,15 @@ check-format: venv
 
 .PHONY: format
 format: venv
+	${PYTHON} -m isort src/ test/
 	${PYTHON} -m black --config=pyproject.toml src/ test/
 
 .PHONY: lint
 lint: venv
 	${PYTHON} -m flake8 --ignore=W503,E501 src/ test/
-	${PYTHON} -m isort src/ test/
+	${PYTHON} -m isort src/ test/ --check-only
+	${PYTHON} -m black --config=pyproject.toml src/ test/ --check
+
 
 .PHONY: clean
 clean:

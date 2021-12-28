@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-source test-env/bin/activate
+source ../dev-venv/bin/activate
 
 
 export PGHOST=localhost

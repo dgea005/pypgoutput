@@ -12,7 +12,7 @@ exclude = '''
     | \.tox
     | \.venv
     | _build
-    | test/test-env
+    | dev-venv
     | build
     | dist
   )/

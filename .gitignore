@@ -1,6 +1,7 @@
 __pycache__/
 .pytest_cache
 test-env/
+dev-venv/
 *.out
 test_output_files/
 src/pypgoutput.egg-info

@@ -10,7 +10,8 @@ from typing import Dict, Generator
 import psycopg2
 import psycopg2.extras
 
-from pypgoutput import SourceDBHandler, TupleData, decode_message
+from pypgoutput.decoders import TupleData, decode_message
+from pypgoutput.utils import SourceDBHandler
 
 logger = logging.getLogger(__name__)
 

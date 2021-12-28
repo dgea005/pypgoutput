@@ -25,7 +25,7 @@ test: venv
 
 .PHONY: check-format
 check-format: venv
-	${PYTHON} -m black --config=pyproject.toml --check src/ test/ --diff
+	${PYTHON} -m black --config=pyproject.toml --check src/ test/
 
 .PHONY: format
 format: venv

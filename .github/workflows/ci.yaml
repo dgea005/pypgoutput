@@ -10,6 +10,22 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Docker Hub image
+        image: postgres:12:3
+        # Provide the password for postgres
+        env:
+          POSTGRES_DB=test
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          POSTGRES_PORT=5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -18,4 +34,10 @@ jobs:
       - name: lint
         run: make lint
       - name: test
+        env:
+          POSTGRES_DB=test
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          POSTGRES_PORT=5432
         run: make test
+

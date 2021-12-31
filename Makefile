@@ -22,6 +22,13 @@ $(INSTALL_STAMP): setup.py tests/requirements-dev.txt
 .PHONY: test
 test: venv
 	${PYTHON} -m pytest -vv tests/test_unit.py
+	${PYTHON} -m pytest -svx tests/test_integration.py
+
+.PHONY: test-local
+test-local: venv
+	${PYTHON} -m pytest -vv tests/test_unit.py
+	./tests/start_local_db.sh
+	${PYTHON} -m pytest -svx tests/test_integration.py
 
 .PHONY: check-format
 check-format: venv

@@ -1,16 +1,24 @@
+import os
 import psycopg2
 import psycopg2.extras
 import pytest
 
 
+HOST = os.environ.get("PGHOST")
+PORT = os.environ.get("PGPORT")
+DATABASE_NAME = os.environ.get("PGDATABASE")
+USER = os.environ.get("PGUSER")
+PASSWORD = os.environ.get("PGPASSWORD")
+
+
 @pytest.fixture
 def connection():
     connection = psycopg2.connect(
-        host="localhost",
-        database="test",
-        port=5432,
-        user="test",
-        password="test",
+        host=HOST,
+        database=DATABASE_NAME,
+        port=PORT,
+        user=USER,
+        password=PASSWORD,
     )
     yield connection
     connection.close()

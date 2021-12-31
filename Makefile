@@ -27,8 +27,7 @@ test: venv
 .PHONY: test-local
 test-local: venv
 	${PYTHON} -m pytest -vv tests/test_unit.py
-	./tests/start_local_db.sh
-	${PYTHON} -m pytest -svx tests/test_integration.py
+	./tests/run_tests_locally.sh
 
 .PHONY: check-format
 check-format: venv

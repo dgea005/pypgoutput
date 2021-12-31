@@ -16,9 +16,9 @@ jobs:
         image: postgres:12:3
         # Provide the password for postgres
         env:
-          POSTGRES_DB=test
-          POSTGRES_USER=test
-          POSTGRES_PASSWORD=test
+          POSTGRES_DB: test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
         ports:
           - 5432:5432
         # Set health checks to wait until postgres has started
@@ -36,10 +36,10 @@ jobs:
         run: make lint
       - name: test
         env:
-          POSTGRES_DB=test
-          POSTGRES_HOST=localhost
-          POSTGRES_USER=test
-          POSTGRES_PASSWORD=test
+          POSTGRES_DB: test
+          POSTGRES_HOST: localhost
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
           ${{ job.services.postgres.ports[5432] }}
         run: make test
 

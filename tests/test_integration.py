@@ -1,8 +1,8 @@
 import os
+
 import psycopg2
 import psycopg2.extras
 import pytest
-
 
 HOST = os.environ.get("PGHOST")
 PORT = os.environ.get("PGPORT")

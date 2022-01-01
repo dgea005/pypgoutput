@@ -4,7 +4,7 @@ set -e
 export PGHOST=localhost
 export PGPORT=5432
 export PGDATABASE=test
-export PGUSER=test
+export PGUSER=postgres
 export PGPASSWORD=test
 
 docker-compose -f tests/docker-compose.yaml down -v --remove-orphans
@@ -17,5 +17,5 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
   sleep 1
 done
 
-# PYTHON variable comes from this script being run from the Makefile 
+# PYTHON variable comes from this script being run from the Makefile
 ${PYTHON} -m pytest -svx tests/test_integration.py

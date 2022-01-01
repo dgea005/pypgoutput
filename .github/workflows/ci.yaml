@@ -13,12 +13,12 @@ jobs:
     services:
       postgres:
         # Docker Hub image
-        image: postgres:12.3
+        image: "bitnami/postgresql:12.9.0"
         # Provide the password for postgres
         env:
+          POSTGRESQL_PASSWORD: test
           POSTGRES_DB: test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
+          POSTGRESQL_WAL_LEVEL: logical
         ports:
           - 5432:5432
         # Set health checks to wait until postgres has started
@@ -39,7 +39,7 @@ jobs:
         # follows libpq env conventions https://www.postgresql.org/docs/12/libpq-envars.html
           PGDATABASE: test
           PGHOST: localhost
-          PGUSER: test
+          PGUSER: postgres
           PGPASSWORD: test
           PGPORT: ${{ job.services.postgres.ports[5432] }}
         run: make test

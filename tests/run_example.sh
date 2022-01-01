@@ -5,9 +5,9 @@ source ../dev-venv/bin/activate
 
 export PGHOST=localhost
 export PGPORT=5432
-export PGDATABASE=test
-export PGUSER=test
-export PGPASSWORD=test
+export PGDATABASE=test_db
+export PGUSER=postgres
+export PGPASSWORD=test_pw
 
 docker-compose -f docker-compose.yaml down -v --remove-orphans
 docker-compose -f docker-compose.yaml up -d
@@ -20,6 +20,11 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
 done
 
 # Start script to create individual binary files of pgoutput records
+
+psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a << EOF
+CREATE PUBLICATION pub FOR ALL TABLES;
+SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');
+EOF
 
 psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a --file=test_queries.sql
 sleep 1

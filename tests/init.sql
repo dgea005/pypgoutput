@@ -27,8 +27,3 @@ CREATE TRIGGER zzz_updated_at_trigger
     ON public.test_table_2
     FOR EACH ROW
     EXECUTE PROCEDURE public.updated_at_trigger();
-
-
---CREATE PUBLICATION pub FOR TABLE test_table;
-CREATE PUBLICATION pub FOR ALL TABLES;
-SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');

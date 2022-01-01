@@ -1,18 +1,18 @@
 version: '3'
 services:
   database:
-    image: "postgres:12.3"
+    image: "bitnami/postgresql:12.9.0"
     ports:
       - 5432:5432
+    # https://github.com/bitnami/bitnami-docker-postgresql/blob/master/12/debian-10/rootfs/opt/bitnami/scripts/postgresql-env.sh
     environment:
-      POSTGRES_PASSWORD: test
-      POSTGRES_USER: test
-      POSTGRES_DB: test
+      POSTGRESQL_PASSWORD: test_pw
+      POSTGRES_DB: test_db
       POSTGRES_PORT: 5432
+      POSTGRESQL_WAL_LEVEL: logical
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
-    command: postgres -c wal_level=logical
 
 volumes:
     database-data: # named volumes can be managed easier using docker-compose

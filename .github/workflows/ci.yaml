@@ -10,6 +10,23 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Docker Hub image
+        image: "bitnami/postgresql:12.9.0"
+        # Provide the password for postgres
+        env:
+          POSTGRESQL_PASSWORD: test_pw
+          POSTGRES_DB: test_db
+          POSTGRESQL_WAL_LEVEL: logical
+        ports:
+          - 5432:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd "pg_isready -d test_db -U postgres -p 5432"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -18,4 +35,11 @@ jobs:
       - name: lint
         run: make lint
       - name: test
+        env:
+        # follows libpq env conventions https://www.postgresql.org/docs/12/libpq-envars.html
+          PGDATABASE: test_db
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: test_pw
+          PGPORT: ${{ job.services.postgres.ports[5432] }}
         run: make test

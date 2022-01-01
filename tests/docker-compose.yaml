@@ -6,8 +6,8 @@ services:
       - 5432:5432
     # https://github.com/bitnami/bitnami-docker-postgresql/blob/master/12/debian-10/rootfs/opt/bitnami/scripts/postgresql-env.sh
     environment:
-      POSTGRESQL_PASSWORD: test
-      POSTGRES_DB: test
+      POSTGRESQL_PASSWORD: test_pw
+      POSTGRES_DB: test_db
       POSTGRES_PORT: 5432
       POSTGRESQL_WAL_LEVEL: logical
     volumes:

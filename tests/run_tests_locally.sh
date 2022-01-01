@@ -3,9 +3,9 @@ set -e
 
 export PGHOST=localhost
 export PGPORT=5432
-export PGDATABASE=test
+export PGDATABASE=test_db
 export PGUSER=postgres
-export PGPASSWORD=test
+export PGPASSWORD=test_pw
 
 docker-compose -f tests/docker-compose.yaml down -v --remove-orphans
 docker-compose -f tests/docker-compose.yaml up -d

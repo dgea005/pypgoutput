@@ -16,14 +16,14 @@ jobs:
         image: "bitnami/postgresql:12.9.0"
         # Provide the password for postgres
         env:
-          POSTGRESQL_PASSWORD: test
-          POSTGRES_DB: test
+          POSTGRESQL_PASSWORD: test_pw
+          POSTGRES_DB: test_db
           POSTGRESQL_WAL_LEVEL: logical
         ports:
           - 5432:5432
         # Set health checks to wait until postgres has started
         options: >-
-          --health-cmd "pg_isready -d test -U postgres -p 5432"
+          --health-cmd "pg_isready -d test_db -U postgres -p 5432"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -37,9 +37,9 @@ jobs:
       - name: test
         env:
         # follows libpq env conventions https://www.postgresql.org/docs/12/libpq-envars.html
-          PGDATABASE: test
+          PGDATABASE: test_db
           PGHOST: localhost
           PGUSER: postgres
-          PGPASSWORD: test
+          PGPASSWORD: test_pw
           PGPORT: ${{ job.services.postgres.ports[5432] }}
         run: make test

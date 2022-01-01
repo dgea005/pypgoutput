@@ -5,9 +5,9 @@ source ../dev-venv/bin/activate
 
 export PGHOST=localhost
 export PGPORT=5432
-export PGDATABASE=test
+export PGDATABASE=test_db
 export PGUSER=postgres
-export PGPASSWORD=test
+export PGPASSWORD=test_pw
 
 docker-compose -f docker-compose.yaml down -v --remove-orphans
 docker-compose -f docker-compose.yaml up -d

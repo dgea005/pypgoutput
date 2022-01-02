@@ -102,6 +102,7 @@ class ExtractRaw(Process):
     def run(self) -> None:
         conn = psycopg2.connect(self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
         cur = conn.cursor()
+        # TODO fix hardcoded "pub" publication name
         replication_options = {"publication_names": "pub", "proto_version": "1"}
         try:
             cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
@@ -109,6 +110,7 @@ class ExtractRaw(Process):
             cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
             cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         try:
+            logger.info(f"Starting replication from slot: {self.slot_name}")
             cur.consume_stream(self.msg_consumer)
         except Exception as err:
             logger.error(f"Error consuming stream from slot: '{self.slot_name}'. {err}")

@@ -13,7 +13,7 @@ $body$ LANGUAGE plpgsql;
 CREATE TABLE public.test (id integer primary key, updated_at timestamptz not null);
 
 
-CREATE TRIGGER zzz_updated_at_trigger
+CREATE TRIGGER updated_at_trigger
     BEFORE INSERT OR UPDATE
     ON public.test
     FOR EACH ROW
@@ -22,7 +22,7 @@ CREATE TRIGGER zzz_updated_at_trigger
 CREATE TABLE public.test_table_2 (id integer primary key, updated_at timestamptz not null);
 
 
-CREATE TRIGGER zzz_updated_at_trigger
+CREATE TRIGGER updated_at_trigger
     BEFORE INSERT OR UPDATE
     ON public.test_table_2
     FOR EACH ROW

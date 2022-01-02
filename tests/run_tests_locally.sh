@@ -17,10 +17,10 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
   sleep 1
 done
 
-psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a << EOF
-CREATE PUBLICATION pub FOR ALL TABLES;
-SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');
-EOF
+# psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -a << EOF
+# CREATE PUBLICATION pub FOR ALL TABLES;
+# SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');
+# EOF
 
 # PYTHON variable comes from this script being run from the Makefile
 ${PYTHON} -m pytest -svx tests/test_integration.py

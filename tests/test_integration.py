@@ -41,6 +41,13 @@ def cursor(connection):
     curs.close()
 
 
+@pytest.fixture
+def configure_logical_decoding(cursor):
+    # TODO: should run only once per test session
+    cursor.execute("CREATE PUBLICATION pub FOR ALL TABLES;")
+    cursor.execute("SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');")
+
+
 def test_000_dummy_test(cursor):
     """make sure connection/cursor and DB is operational for tests"""
     cursor.execute("SELECT 1 as n;")
@@ -48,7 +55,7 @@ def test_000_dummy_test(cursor):
     assert result["n"] == 1
 
 
-def test_reader(cursor):
+def test_reader(cursor, configure_logical_decoding):
     cdc_reader = pypgoutput.LogicalReplicationReader(db_name=DATABASE_NAME, db_dsn=LOCAL_DSN, slot_name=SLOT_NAME)
     # assumes all tables are in publication
     query = """

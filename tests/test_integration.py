@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.DEBUG, format="%(relativeCreated)6d %(processN
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def connection():
     connection = psycopg2.connect(
         host=HOST,
@@ -34,16 +34,28 @@ def connection():
     connection.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def cursor(connection):
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
     yield curs
     curs.close()
 
 
-@pytest.fixture
-def configure_logical_decoding(cursor):
+@pytest.fixture(scope="session")
+def configure_db(cursor):
     # TODO: should run only once per test session
+    cursor.execute(
+        """
+    CREATE OR REPLACE FUNCTION public.updated_at_trigger ()  RETURNS trigger
+    VOLATILE
+    AS $body$
+    BEGIN
+        NEW.updated_at := clock_timestamp();
+        RETURN NEW;
+    END;
+    $body$ LANGUAGE plpgsql;"""
+    )
+
     cursor.execute("CREATE PUBLICATION pub FOR ALL TABLES;")
     cursor.execute("SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');")
 
@@ -55,7 +67,7 @@ def test_000_dummy_test(cursor):
     assert result["n"] == 1
 
 
-def test_reader(cursor, configure_logical_decoding):
+def test_reader(cursor, configure_db):
     cdc_reader = pypgoutput.LogicalReplicationReader(db_name=DATABASE_NAME, db_dsn=LOCAL_DSN, slot_name=SLOT_NAME)
     # assumes all tables are in publication
     query = """

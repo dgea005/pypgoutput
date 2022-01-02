@@ -11,7 +11,7 @@ services:
       POSTGRES_PORT: 5432
       POSTGRESQL_WAL_LEVEL: logical
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      #- ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
 
 volumes:

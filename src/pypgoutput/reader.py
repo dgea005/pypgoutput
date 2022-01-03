@@ -5,9 +5,10 @@ import uuid
 from collections import OrderedDict
 from multiprocessing.connection import Connection
 from multiprocessing.context import Process
-from typing import Dict, Generator
+from typing import AnyStr, Dict, Generator, Optional
 
 import psycopg2
+import psycopg2.extensions
 import psycopg2.extras
 
 from pypgoutput.decoders import TupleData, decode_message
@@ -27,24 +28,21 @@ class LogicalReplicationReader:
            from previous messages and by looking up values in the source DBs catalog
     """
 
-    def __init__(self, db_name: str, db_dsn: str, slot_name: str) -> None:
-        self.db_name = db_name
-        self.db_dsn = db_dsn
+    def __init__(self, publication_name: AnyStr, slot_name: AnyStr, dsn: Optional[AnyStr] = None, **kwargs) -> None:
+        self.dsn = psycopg2.extensions.make_dsn(dsn=dsn, **kwargs)
+        self.publication_name = publication_name
         self.slot_name = slot_name
-        self.extractor = None
         self.setup()
 
     def setup(self):
         self.pipe_out_conn, self.pipe_in_conn = multiprocessing.Pipe(duplex=True)
-        self.extractor = ExtractRaw(pipe_conn=self.pipe_in_conn, db_dsn=self.db_dsn, slot_name=self.slot_name)
+        self.extractor = ExtractRaw(
+            pipe_conn=self.pipe_in_conn, dsn=self.dsn, publication_name=self.publication_name, slot_name=self.slot_name
+        )
         self.extractor.start()
         # TODO: make some aspect of this output configurable
         self.raw_msgs = self.read_raw_extracted()
-        self.transformed_msgs = transform_raw_to_change_event(
-            message_stream=self.raw_msgs,
-            source_dsn=self.db_dsn,
-            source_db_name=self.db_name,
-        )
+        self.transformed_msgs = transform_raw_to_change_event(message_stream=self.raw_msgs, dsn=self.dsn)
 
     def stop(self):
         """Stop reader process and close the pipe"""
@@ -93,17 +91,17 @@ class ExtractRaw(Process):
     https://www.psycopg.org/docs/extras.html#psycopg2.extras.ReplicationCursor.consume_stream
     """
 
-    def __init__(self, pipe_conn: Connection, db_dsn: str, slot_name: str):
+    def __init__(self, dsn: str, publication_name: str, slot_name: str, pipe_conn: Connection):
         Process.__init__(self)
-        self.pipe_conn = pipe_conn
-        self.db_dsn = db_dsn
+        self.dsn = dsn
+        self.publication_name = publication_name
         self.slot_name = slot_name
+        self.pipe_conn = pipe_conn
 
     def run(self) -> None:
-        conn = psycopg2.connect(self.db_dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
+        conn = psycopg2.connect(self.dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
         cur = conn.cursor()
-        # TODO fix hardcoded "pub" publication name
-        replication_options = {"publication_names": "pub", "proto_version": "1"}
+        replication_options = {"publication_names": self.publication_name, "proto_version": "1"}
         try:
             cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         except psycopg2.ProgrammingError:
@@ -129,7 +127,6 @@ class ExtractRaw(Process):
             "wal_end": msg.wal_end,
         }
         self.pipe_conn.send(message)
-
         result = self.pipe_conn.recv()  # how would this wait until processing is done?
         if result["id"] == message_id:
             msg.cursor.send_feedback(flush_lsn=msg.data_start)
@@ -175,9 +172,7 @@ def map_tuple_to_dict(tuple_data: TupleData, relation: dict) -> OrderedDict:
     return output
 
 
-def transform_raw_to_change_event(
-    message_stream: Generator[Dict, None, None], source_dsn: str, source_db_name: str
-) -> Generator[Dict, None, None]:
+def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], dsn: str) -> Generator[Dict, None, None]:
     """Convert raw messages to change events
 
     Replication protocol https://www.postgresql.org/docs/12/protocol-logical-replication.html
@@ -190,8 +185,11 @@ def transform_raw_to_change_event(
     It's downstream's responsibility to handle this as needed (if needed).
     The Origin message is always sent before any DML messages in the transaction.
     """
-    source_handler = SourceDBHandler(dsn=source_dsn)
-    source_handler.connect()
+    source_handler = SourceDBHandler(dsn=dsn)
+    database = source_handler.conn.get_dsn_parameters()["dbname"]
+
+    # logger.info(f"Connection attributes: {conn.get_dsn_parameters()}")
+
     table_schemas = {}
     pg_types = {}
     # begin and commit messages
@@ -203,7 +201,7 @@ def transform_raw_to_change_event(
             relation_id = decoded_msg.relation_id
             table_schemas[relation_id] = {
                 "column_definitions": [],
-                "db": source_db_name,
+                "db": database,
                 "schema": decoded_msg.namespace,
                 "table": decoded_msg.relation_name,
             }

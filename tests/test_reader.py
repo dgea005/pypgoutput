@@ -13,7 +13,8 @@ DATABASE_NAME = os.environ.get("PGDATABASE")
 USER = os.environ.get("PGUSER")
 PASSWORD = os.environ.get("PGPASSWORD")
 
-SLOT_NAME = "my_slot"
+PUBLICATION_NAME = "test_pub"
+SLOT_NAME = "test_slot"
 LOCAL_DSN = f"host=localhost user={USER} port={PORT} dbname={DATABASE_NAME} password={PASSWORD}"
 
 logging.basicConfig(level=logging.DEBUG, format="%(relativeCreated)6d %(processName)s %(message)s")
@@ -43,9 +44,11 @@ def cursor(connection):
 
 @pytest.fixture(scope="session")
 def configure_test_db(cursor):
-    cursor.execute("CREATE PUBLICATION pub FOR ALL TABLES;")
-    cursor.execute("SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');")
-    cdc_reader = pypgoutput.LogicalReplicationReader(db_name=DATABASE_NAME, db_dsn=LOCAL_DSN, slot_name=SLOT_NAME)
+    cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
+    cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
+    cdc_reader = pypgoutput.LogicalReplicationReader(
+        dsn=LOCAL_DSN, publication_name=PUBLICATION_NAME, slot_name=SLOT_NAME
+    )
     # assumes all tables are in publication
     query = """DROP TABLE IF EXISTS public.integration CASCADE;
     CREATE TABLE public.integration (
@@ -68,8 +71,6 @@ def test_000_dummy_test(cursor):
 def test_001_insert(cursor, configure_test_db):
     """with default replica identity"""
     cdc_reader = configure_test_db
-    # cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
-    # assert cursor.fetchone()["n"] == 0
     cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (10, '2020-01-01 00:00:00+00');")
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
     assert cursor.fetchone()["n"] == 1

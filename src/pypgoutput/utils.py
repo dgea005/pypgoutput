@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class SourceDBHandler:
     def __init__(self, dsn):
         self.dsn = dsn
+        self.connect()
 
     def connect(self):
         self.conn = psycopg2.connect(self.dsn)

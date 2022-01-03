@@ -40,7 +40,7 @@ class LogicalReplicationReader:
             pipe_conn=self.pipe_in_conn, dsn=self.dsn, publication_name=self.publication_name, slot_name=self.slot_name
         )
         self.extractor.start()
-        # TODO: make some aspect of this output configurable
+        # TODO: make some aspect of this output configurable, raw msg return
         self.raw_msgs = self.read_raw_extracted()
         self.transformed_msgs = transform_raw_to_change_event(message_stream=self.raw_msgs, dsn=self.dsn)
 
@@ -187,9 +187,6 @@ def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], d
     """
     source_handler = SourceDBHandler(dsn=dsn)
     database = source_handler.conn.get_dsn_parameters()["dbname"]
-
-    # logger.info(f"Connection attributes: {conn.get_dsn_parameters()}")
-
     table_schemas = {}
     pg_types = {}
     # begin and commit messages

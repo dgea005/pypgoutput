@@ -15,7 +15,6 @@ PASSWORD = os.environ.get("PGPASSWORD")
 
 PUBLICATION_NAME = "test_pub"
 SLOT_NAME = "test_slot"
-LOCAL_DSN = f"host=localhost user={USER} port={PORT} dbname={DATABASE_NAME} password={PASSWORD}"
 
 logging.basicConfig(level=logging.DEBUG, format="%(relativeCreated)6d %(processName)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,7 +46,13 @@ def configure_test_db(cursor):
     cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
     cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
     cdc_reader = pypgoutput.LogicalReplicationReader(
-        dsn=LOCAL_DSN, publication_name=PUBLICATION_NAME, slot_name=SLOT_NAME
+        publication_name=PUBLICATION_NAME,
+        slot_name=SLOT_NAME,
+        host=HOST,
+        database=DATABASE_NAME,
+        port=PORT,
+        user=USER,
+        password=PASSWORD,
     )
     # assumes all tables are in publication
     query = """DROP TABLE IF EXISTS public.integration CASCADE;

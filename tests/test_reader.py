@@ -42,22 +42,20 @@ def cursor(connection):
 
 
 @pytest.fixture(scope="session")
-def configure_db(cursor):
-    # TODO: should run only once per test session
-    cursor.execute(
-        """
-    CREATE OR REPLACE FUNCTION public.updated_at_trigger ()  RETURNS trigger
-    VOLATILE
-    AS $body$
-    BEGIN
-        NEW.updated_at := clock_timestamp();
-        RETURN NEW;
-    END;
-    $body$ LANGUAGE plpgsql;"""
-    )
-
+def configure_test_db(cursor):
     cursor.execute("CREATE PUBLICATION pub FOR ALL TABLES;")
     cursor.execute("SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');")
+    cdc_reader = pypgoutput.LogicalReplicationReader(db_name=DATABASE_NAME, db_dsn=LOCAL_DSN, slot_name=SLOT_NAME)
+    # assumes all tables are in publication
+    query = """DROP TABLE IF EXISTS public.integration CASCADE;
+    CREATE TABLE public.integration (
+        id integer primary key,
+        updated_at timestamptz
+    );"""
+    cursor.execute(query)
+    yield cdc_reader
+    logger.info("Closing test CDC reader")
+    cdc_reader.stop()
 
 
 def test_000_dummy_test(cursor):
@@ -67,30 +65,113 @@ def test_000_dummy_test(cursor):
     assert result["n"] == 1
 
 
-def test_reader(cursor, configure_db):
-    cdc_reader = pypgoutput.LogicalReplicationReader(db_name=DATABASE_NAME, db_dsn=LOCAL_DSN, slot_name=SLOT_NAME)
-    # assumes all tables are in publication
-    query = """
-    DROP TABLE IF EXISTS public.integration;
-    CREATE TABLE public.integration (id integer primary key, updated_at timestamptz);
-    CREATE TRIGGER updated_at_trigger
-    BEFORE INSERT OR UPDATE
-    ON public.integration
-    FOR EACH ROW
-    EXECUTE PROCEDURE public.updated_at_trigger();
-    """
-    cursor.execute(query)
-    cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
-    assert cursor.fetchone()["n"] == 0
-    cursor.execute("INSERT INTO public.integration (id) VALUES (10);")
-    logger.info("writing data to table")
+def test_001_insert(cursor, configure_test_db):
+    """with default replica identity"""
+    cdc_reader = configure_test_db
+    # cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
+    # assert cursor.fetchone()["n"] == 0
+    cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (10, '2020-01-01 00:00:00+00');")
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
     assert cursor.fetchone()["n"] == 1
 
     message = next(cdc_reader)
+    # print(json.dumps(message, indent=2, default=str))
     assert message["op"] == "I"
     assert message["source"]["db"] == "test_db"
     assert message["source"]["schema"] == "public"
     assert message["source"]["table"] == "integration"
-    logger.info("closing extractor")
-    cdc_reader.stop()
+
+    assert message["table_schema"][0]["name"] == "id"
+    assert message["table_schema"][0]["part_of_pkey"] == 1
+    assert message["table_schema"][0]["type"] == "integer"
+    assert message["table_schema"][0]["optional"] is False
+
+    assert message["table_schema"][1]["name"] == "updated_at"
+    assert message["table_schema"][1]["part_of_pkey"] == 0
+    assert message["table_schema"][1]["type"] == "timestamp with time zone"
+    assert message["table_schema"][1]["optional"] is True
+
+    assert message["before"] is None
+    assert list(message["after"].keys()) == ["id", "updated_at"]
+    # TODO these types should be cast correctly at some point
+    assert message["after"]["id"] == "10"
+    assert message["after"]["updated_at"] == "2020-01-01 00:00:00+00"
+
+
+# TODO: ordering of these tests is dependent on the names and should not be
+def test_002_update(cursor, configure_test_db):
+    """with default replica identity"""
+    cdc_reader = configure_test_db
+    cursor.execute("UPDATE public.integration SET updated_at = '2020-02-01 00:00:00+00' WHERE id = 10;")
+    message = next(cdc_reader)
+    assert message["op"] == "U"
+    assert message["source"]["db"] == "test_db"
+    assert message["source"]["schema"] == "public"
+    assert message["source"]["table"] == "integration"
+
+    assert message["table_schema"][0]["name"] == "id"
+    assert message["table_schema"][0]["part_of_pkey"] == 1
+    assert message["table_schema"][0]["type"] == "integer"
+    assert message["table_schema"][0]["optional"] is False
+
+    assert message["table_schema"][1]["name"] == "updated_at"
+    assert message["table_schema"][1]["part_of_pkey"] == 0
+    assert message["table_schema"][1]["type"] == "timestamp with time zone"
+    assert message["table_schema"][1]["optional"] is True
+    # TODO check what happens with replica identity full?
+    assert message["before"] is None
+    assert list(message["after"].keys()) == ["id", "updated_at"]
+    # TODO these types should be cast correctly at some point
+    assert message["after"]["id"] == "10"
+    assert message["after"]["updated_at"] == "2020-02-01 00:00:00+00"
+
+
+def test_003_delete(cursor, configure_test_db):
+    """with default replica identity"""
+    cdc_reader = configure_test_db
+    cursor.execute("DELETE FROM public.integration WHERE id = 10;")
+    message = next(cdc_reader)
+    assert message["op"] == "D"
+    assert message["source"]["db"] == "test_db"
+    assert message["source"]["schema"] == "public"
+    assert message["source"]["table"] == "integration"
+
+    assert message["table_schema"][0]["name"] == "id"
+    assert message["table_schema"][0]["part_of_pkey"] == 1
+    assert message["table_schema"][0]["type"] == "integer"
+    assert message["table_schema"][0]["optional"] is False
+
+    assert message["table_schema"][1]["name"] == "updated_at"
+    assert message["table_schema"][1]["part_of_pkey"] == 0
+    assert message["table_schema"][1]["type"] == "timestamp with time zone"
+    assert message["table_schema"][1]["optional"] is True
+    assert message["before"]["id"] == "10"
+    assert message["before"]["updated_at"] is None  # check what happens with replica identity
+    assert message["after"] is None
+
+
+def test_004_truncate(cursor, configure_test_db):
+    cdc_reader = configure_test_db
+    cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (11, '2020-01-01 00:00:00+00');")
+    cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
+    assert cursor.fetchone()["n"] == 1
+    insert_msg = next(cdc_reader)
+    assert insert_msg["op"] == "I"
+    cursor.execute("TRUNCATE public.integration;")
+    message = next(cdc_reader)
+    assert message["op"] == "T"
+    assert message["source"]["db"] == "test_db"
+    assert message["source"]["schema"] == "public"
+    assert message["source"]["table"] == "integration"
+
+    assert message["table_schema"][0]["name"] == "id"
+    assert message["table_schema"][0]["part_of_pkey"] == 1
+    assert message["table_schema"][0]["type"] == "integer"
+    assert message["table_schema"][0]["optional"] is False
+
+    assert message["table_schema"][1]["name"] == "updated_at"
+    assert message["table_schema"][1]["part_of_pkey"] == 0
+    assert message["table_schema"][1]["type"] == "timestamp with time zone"
+    assert message["table_schema"][1]["optional"] is True
+    assert message["before"] is None
+    assert message["after"] is None

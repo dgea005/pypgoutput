@@ -18,4 +18,8 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
 done
 
 # PYTHON variable comes from this script being run from the Makefile
-${PYTHON} -m pytest -svx tests/
+# ${PYTHON} -m pytest -svx tests/
+
+source ${VENV}/bin/activate
+coverage run --omit="tests/*" -m pytest -sv tests/
+coverage report -m

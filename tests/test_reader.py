@@ -3,6 +3,7 @@ import os
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.errors
 import pytest
 
 import pypgoutput
@@ -43,6 +44,11 @@ def cursor(connection):
 
 @pytest.fixture(scope="session")
 def configure_test_db(cursor):
+    cursor.execute(f"DROP PUBLICATION IF EXISTS {PUBLICATION_NAME};")
+    try:
+        cursor.execute(f"SELECT pg_drop_replication_slot('{SLOT_NAME}');")
+    except psycopg2.errors.UndefinedObject as err:
+        logger.warning(f"slot {SLOT_NAME} could not be dropped because it does not exist", err)
     cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
     cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
     cdc_reader = pypgoutput.LogicalReplicationReader(

@@ -6,3 +6,4 @@ dev-venv/
 test_output_files/
 src/pypgoutput.egg-info
 test/output.txt
+.coverage

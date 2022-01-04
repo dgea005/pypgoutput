@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.DEBUG, format="%(relativeCreated)6d %(processN
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def connection():
     connection = psycopg2.connect(
         host=HOST,
@@ -35,14 +35,14 @@ def connection():
     connection.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def cursor(connection):
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
     yield curs
     curs.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def configure_test_db(cursor):
     cursor.execute(f"DROP PUBLICATION IF EXISTS {PUBLICATION_NAME};")
     try:

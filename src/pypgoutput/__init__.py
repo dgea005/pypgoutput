@@ -14,7 +14,7 @@ from pypgoutput.decoders import (
     decode_message,
 )
 from pypgoutput.reader import LogicalReplicationReader
-from pypgoutput.utils import SourceDBHandler, convert_string_to_type
+from pypgoutput.utils import QueryError, SourceDBHandler
 
 __all__ = [
     "PgoutputMessage",
@@ -31,6 +31,6 @@ __all__ = [
     "ColumnData",
     "ColumnType",
     "SourceDBHandler",
-    "convert_string_to_type",
     "LogicalReplicationReader",
+    "QueryError",
 ]

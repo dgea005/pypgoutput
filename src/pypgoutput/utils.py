@@ -1,11 +1,14 @@
 import logging
-from datetime import datetime
 from typing import List
 
 import psycopg2
 import psycopg2.extras
 
 logger = logging.getLogger(__name__)
+
+
+class QueryError(Exception):
+    pass
 
 
 class SourceDBHandler:
@@ -25,7 +28,7 @@ class SourceDBHandler:
             return result
         except Exception as err:
             self.conn.rollback()
-            raise Exception("Error running query") from err
+            raise QueryError("Error running query") from err
 
     def fetch(self, query) -> List:
         try:
@@ -33,8 +36,8 @@ class SourceDBHandler:
             result = self.cur.fetchall()
             return result
         except Exception as err:
-            self.cur.rollback()
-            raise Exception("Error running query") from err
+            self.conn.rollback()
+            raise QueryError("Error running query") from err
 
     def fetch_column_type(self, type_id: int, atttypmod: int) -> str:
         """Get formatted data type name"""
@@ -56,19 +59,3 @@ class SourceDBHandler:
     def close(self):
         self.cur.close()
         self.conn.close()
-
-
-def convert_string_to_type(data_type, value):
-    """eventually cast to text values to python types (for further serialisation) but not used yet"""
-    if data_type == "integer":
-        output = int(value)
-    elif data_type == "bigint":
-        output = int(value)
-    elif data_type == "timestamp with time zone":
-        if value[-3:] == "+00":
-            value += ":00"
-        output = datetime.strptime(value, "%Y-%m-%d %H:%M:%S%z")
-    else:
-
-        raise Exception(f"type not recognised: {data_type}")
-    return output

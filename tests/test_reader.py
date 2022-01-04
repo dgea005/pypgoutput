@@ -2,8 +2,8 @@ import logging
 import os
 
 import psycopg2
-import psycopg2.extras
 import psycopg2.errors
+import psycopg2.extras
 import pytest
 
 import pypgoutput

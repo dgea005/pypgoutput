@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from datetime import datetime
 import logging
 import multiprocessing
 import time
@@ -15,6 +17,16 @@ from pypgoutput.decoders import TupleData, decode_message
 from pypgoutput.utils import SourceDBHandler
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ReplicationMessage:
+    message_id: uuid.uuid4
+    data_start: int
+    payload: bytes
+    send_time: datetime
+    data_size: int
+    wal_end: int
 
 
 class LogicalReplicationReader:
@@ -44,7 +56,7 @@ class LogicalReplicationReader:
         self.raw_msgs = self.read_raw_extracted()
         self.transformed_msgs = transform_raw_to_change_event(message_stream=self.raw_msgs, dsn=self.dsn)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop reader process and close the pipe"""
         self.extractor.terminate()
         time.sleep(0.1)
@@ -52,8 +64,8 @@ class LogicalReplicationReader:
         self.pipe_out_conn.close()
         self.pipe_in_conn.close()
 
-    def read_raw_extracted(self):
-        """yield messages from the pipe populated by extractor"""
+    def read_raw_extracted(self) -> Generator[ReplicationMessage, None, None]:
+        """yields ReplicationMessages from the pipe as written by extractor process"""
         empty_count = 0
         iter_count = 0
         msg_count = 0
@@ -64,7 +76,7 @@ class LogicalReplicationReader:
                 item = self.pipe_out_conn.recv()
                 msg_count += 1
                 yield item
-                self.pipe_out_conn.send({"id": item["message_id"]})
+                self.pipe_out_conn.send({"id": item.message_id})
             if iter_count % 50 == 0:
                 logger.info(f"pipe poll count: {iter_count}, messages processed: {msg_count}")
             iter_count += 1
@@ -117,15 +129,14 @@ class ExtractRaw(Process):
 
     def msg_consumer(self, msg):
         message_id = uuid.uuid4()
-        # TODO create a type for this dictionary with defined fields
-        message = {
-            "message_id": message_id,
-            "data_start": msg.data_start,
-            "payload": msg.payload,
-            "send_time": msg.send_time,
-            "data_size": msg.data_size,
-            "wal_end": msg.wal_end,
-        }
+        message = ReplicationMessage(
+            message_id=message_id,
+            data_start=msg.data_start,
+            payload=msg.payload,
+            send_time=msg.send_time,
+            data_size=msg.data_size,
+            wal_end=msg.wal_end
+        )
         self.pipe_conn.send(message)
         result = self.pipe_conn.recv()  # how would this wait until processing is done?
         if result["id"] == message_id:
@@ -172,7 +183,7 @@ def map_tuple_to_dict(tuple_data: TupleData, relation: dict) -> OrderedDict:
     return output
 
 
-def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], dsn: str) -> Generator[Dict, None, None]:
+def transform_raw_to_change_event(message_stream: Generator[ReplicationMessage, None, None], dsn: str) -> Generator[Dict, None, None]:
     """Convert raw messages to change events
 
     Replication protocol https://www.postgresql.org/docs/12/protocol-logical-replication.html
@@ -193,7 +204,7 @@ def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], d
     transaction_metadata = {}
 
     for msg in message_stream:
-        decoded_msg = decode_message(msg["payload"])
+        decoded_msg = decode_message(msg.payload)
         if decoded_msg.byte1 == "R":
             relation_id = decoded_msg.relation_id
             table_schemas[relation_id] = {
@@ -234,8 +245,8 @@ def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], d
                 relation_id=decoded_msg.relation_id,
                 table_metadata=table_schemas[relation_id],
                 transaction_metadata=transaction_metadata,
-                lsn=msg["data_start"],
-                message_id=msg["message_id"],
+                lsn=msg.data_start,
+                message_id=msg.message_id,
             )
             before = None
             if decoded_msg.byte1 in ("U", "D"):
@@ -262,8 +273,8 @@ def transform_raw_to_change_event(message_stream: Generator[Dict, None, None], d
                     relation_id=rel_id,
                     table_metadata=table_schemas[rel_id],
                     transaction_metadata=transaction_metadata,
-                    lsn=msg["data_start"],
-                    message_id=msg["message_id"],
+                    lsn=msg.data_start,
+                    message_id=msg.message_id,
                 )
                 payload["before"] = None
                 payload["after"] = None

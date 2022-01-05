@@ -169,6 +169,12 @@ class Tables(TypedDict):
     relation_id: TableSchema
 
 
+class PgTypes(TypedDict):
+    """Mapping of DB internal type_id to human readable name"""
+
+    type_id: str
+
+
 @dataclass(frozen=True)
 class Transaction:
     tx_id: int
@@ -214,7 +220,7 @@ def transform_raw_to_change_event(
     source_handler = SourceDBHandler(dsn=dsn)
     database = source_handler.conn.get_dsn_parameters()["dbname"]
     table_schemas = Tables()
-    pg_types = {}
+    pg_types = PgTypes()
     # begin and commit messages
     transaction_metadata = None
 

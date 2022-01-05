@@ -1,13 +1,13 @@
-from dataclasses import dataclass
-from datetime import datetime
 import logging
 import multiprocessing
 import time
 import uuid
 from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import datetime
 from multiprocessing.connection import Connection
 from multiprocessing.context import Process
-from typing import AnyStr, Dict, Generator, Optional
+from typing import AnyStr, Dict, Generator, List, Optional, TypedDict
 
 import psycopg2
 import psycopg2.extensions
@@ -135,7 +135,7 @@ class ExtractRaw(Process):
             payload=msg.payload,
             send_time=msg.send_time,
             data_size=msg.data_size,
-            wal_end=msg.wal_end
+            wal_end=msg.wal_end,
         )
         self.pipe_conn.send(message)
         result = self.pipe_conn.recv()  # how would this wait until processing is done?
@@ -146,44 +146,59 @@ class ExtractRaw(Process):
             logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}")
 
 
-def prepare_base_change_event(
-    op: str,
-    relation_id: int,
-    table_metadata: dict,
-    transaction_metadata: dict,
-    lsn: int,
-    message_id: uuid.uuid4,
-) -> dict:
-    """Construct payload dict of change event for I, U, D, T events
-    TODO: define type for this that can be serialised to desired format. E.g. JSON
-    """
-    payload = {}
-    payload["op"] = op
-    payload["id"] = message_id
-    payload["source"] = {
-        "relation_id": relation_id,
-        "db": table_metadata["db"],
-        "schema": table_metadata["schema"],
-        "table": table_metadata["table"],
-        "tx_id": transaction_metadata["tx_xid"],
-        "begin_lsn": transaction_metadata["begin_lsn"],
-        "commit_ts": transaction_metadata["commit_ts"],
-        "lsn": lsn,
-    }
-    payload["table_schema"] = table_metadata["column_definitions"]
-    return payload
+@dataclass
+class ColumnDefinition:
+    name: AnyStr
+    part_of_pkey: bool
+    type_id: int
+    type_name: AnyStr
+    optional: bool
 
 
-def map_tuple_to_dict(tuple_data: TupleData, relation: dict) -> OrderedDict:
+@dataclass
+class TableSchema:
+    column_definitions: List[ColumnDefinition]
+    db: AnyStr
+    schema: AnyStr
+    table: AnyStr
+    relation_id: int
+
+
+class Tables(TypedDict):
+    # TypedDict is from PEP 589 https://www.python.org/dev/peps/pep-0589/
+    relation_id: TableSchema
+
+
+@dataclass(frozen=True)
+class Transaction:
+    tx_id: int
+    begin_lsn: int
+    commit_ts: datetime
+
+
+@dataclass(frozen=True)
+class ChangeEvent:
+    op: AnyStr  # (ENUM of I, U, D, T)
+    message_id: uuid.uuid4
+    lsn: int
+    transaction: Transaction  # replication/source metadata
+    table_schema: TableSchema
+    before: Optional[Dict]
+    after: Optional[Dict]
+
+
+def map_tuple_to_dict(tuple_data: TupleData, relation: TableSchema) -> OrderedDict:
     """Convert tuple data to an OrderedDict with keys from relation mapped in order to tuple data"""
     output = OrderedDict()
     for idx, col in enumerate(tuple_data.column_data):
-        column_name = relation["column_definitions"][idx]["name"]
+        column_name = relation.column_definitions[idx].name
         output[column_name] = col.col_data
     return output
 
 
-def transform_raw_to_change_event(message_stream: Generator[ReplicationMessage, None, None], dsn: str) -> Generator[Dict, None, None]:
+def transform_raw_to_change_event(
+    message_stream: Generator[ReplicationMessage, None, None], dsn: str
+) -> Generator[ChangeEvent, None, None]:
     """Convert raw messages to change events
 
     Replication protocol https://www.postgresql.org/docs/12/protocol-logical-replication.html
@@ -198,87 +213,84 @@ def transform_raw_to_change_event(message_stream: Generator[ReplicationMessage, 
     """
     source_handler = SourceDBHandler(dsn=dsn)
     database = source_handler.conn.get_dsn_parameters()["dbname"]
-    table_schemas = {}
+    table_schemas = Tables()
     pg_types = {}
     # begin and commit messages
-    transaction_metadata = {}
+    transaction_metadata = None
 
     for msg in message_stream:
         decoded_msg = decode_message(msg.payload)
         if decoded_msg.byte1 == "R":
             relation_id = decoded_msg.relation_id
-            table_schemas[relation_id] = {
-                "column_definitions": [],
-                "db": database,
-                "schema": decoded_msg.namespace,
-                "table": decoded_msg.relation_name,
-            }
+            column_definitions = []
             for column in decoded_msg.columns:
                 pg_types[column.type_id] = source_handler.fetch_column_type(
                     type_id=column.type_id, atttypmod=column.atttypmod
                 )
-                # pre-compute schema for attaching to messages
-                table_schemas[relation_id]["column_definitions"].append(
-                    {
-                        "name": column.name,
-                        "part_of_pkey": column.part_of_pkey,
-                        "type_id": column.type_id,
-                        "type": pg_types[column.type_id],
-                        "optional": source_handler.fetch_if_column_is_optional(
-                            table_schema=decoded_msg.namespace,
-                            table_name=decoded_msg.relation_name,
-                            column_name=column.name,
-                        ),
-                    }
+                # pre-compute schema of the table for attaching to messages
+                is_optional = source_handler.fetch_if_column_is_optional(
+                    table_schema=decoded_msg.namespace, table_name=decoded_msg.relation_name, column_name=column.name
                 )
+                column_definitions.append(
+                    ColumnDefinition(
+                        name=column.name,
+                        part_of_pkey=column.part_of_pkey,
+                        type_id=column.part_of_pkey,
+                        type_name=pg_types[column.type_id],
+                        optional=is_optional,
+                    )
+                )
+            table_schemas[relation_id] = TableSchema(
+                db=database,
+                schema=decoded_msg.namespace,
+                table=decoded_msg.relation_name,
+                column_definitions=column_definitions,
+                relation_id=relation_id,
+            )
+
         elif decoded_msg.byte1 == "B":
             # overwrite transaction_metadata, once we reach next BEGIN the previous TX is processed
-            transaction_metadata = {
-                "tx_xid": decoded_msg.tx_xid,
-                "begin_lsn": decoded_msg.lsn,
-                "commit_ts": decoded_msg.commit_ts,
-                "processed": False,
-            }
-        elif decoded_msg.byte1 in ("I", "U", "D"):
-            payload = prepare_base_change_event(
-                op=decoded_msg.byte1,
-                relation_id=decoded_msg.relation_id,
-                table_metadata=table_schemas[relation_id],
-                transaction_metadata=transaction_metadata,
-                lsn=msg.data_start,
-                message_id=msg.message_id,
+            transaction_metadata = Transaction(
+                tx_id=decoded_msg.tx_xid, begin_lsn=decoded_msg.lsn, commit_ts=decoded_msg.commit_ts
             )
+        elif decoded_msg.byte1 in ("I", "U", "D"):
             before = None
+            after = None
             if decoded_msg.byte1 in ("U", "D"):
                 if decoded_msg.old_tuple:
                     before = map_tuple_to_dict(
                         tuple_data=decoded_msg.old_tuple,
                         relation=table_schemas[decoded_msg.relation_id],
                     )
-            after = None
             if decoded_msg.byte1 != "D":
                 after = map_tuple_to_dict(
                     tuple_data=decoded_msg.new_tuple,
                     relation=table_schemas[decoded_msg.relation_id],
                 )
-
-            payload["before"] = before
-            payload["after"] = after
+            payload = ChangeEvent(
+                op=decoded_msg.byte1,
+                message_id=msg.message_id,
+                lsn=msg.data_start,
+                transaction=transaction_metadata,
+                table_schema=table_schemas[relation_id],
+                before=before,
+                after=after,
+            )
             yield payload
 
         elif decoded_msg.byte1 == "T":
-            for rel_id in decoded_msg.relation_ids:
-                payload = prepare_base_change_event(
+            for relation_id in decoded_msg.relation_ids:
+                payload = ChangeEvent(
                     op=decoded_msg.byte1,
-                    relation_id=rel_id,
-                    table_metadata=table_schemas[rel_id],
-                    transaction_metadata=transaction_metadata,
-                    lsn=msg.data_start,
                     message_id=msg.message_id,
+                    lsn=msg.data_start,
+                    transaction=transaction_metadata,
+                    table_schema=table_schemas[relation_id],
+                    before=None,
+                    after=None,
                 )
-                payload["before"] = None
-                payload["after"] = None
                 yield payload
 
         elif decoded_msg.byte1 == "C":
-            transaction_metadata["processed"] = True
+            # transaction is now processed
+            transaction_metadata = None

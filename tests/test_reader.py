@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Generator
 
 import psycopg2
 import psycopg2.errors
@@ -79,7 +80,7 @@ def test_000_dummy_test(cursor):
     assert result["n"] == 1
 
 
-def test_001_insert(cursor, configure_test_db):
+def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (10, '2020-01-01 00:00:00+00');")
@@ -88,102 +89,104 @@ def test_001_insert(cursor, configure_test_db):
 
     message = next(cdc_reader)
     # print(json.dumps(message, indent=2, default=str))
-    assert message["op"] == "I"
-    assert message["source"]["db"] == "test_db"
-    assert message["source"]["schema"] == "public"
-    assert message["source"]["table"] == "integration"
 
-    assert message["table_schema"][0]["name"] == "id"
-    assert message["table_schema"][0]["part_of_pkey"] == 1
-    assert message["table_schema"][0]["type"] == "integer"
-    assert message["table_schema"][0]["optional"] is False
+    assert message.op == "I"
+    assert message.table_schema.db == "test_db"
+    assert message.table_schema.schema == "public"
+    assert message.table_schema.table == "integration"
 
-    assert message["table_schema"][1]["name"] == "updated_at"
-    assert message["table_schema"][1]["part_of_pkey"] == 0
-    assert message["table_schema"][1]["type"] == "timestamp with time zone"
-    assert message["table_schema"][1]["optional"] is True
+    assert message.table_schema.column_definitions[0].name == "id"
+    assert message.table_schema.column_definitions[0].part_of_pkey == 1
+    assert message.table_schema.column_definitions[0].type_name == "integer"
+    assert message.table_schema.column_definitions[0].optional is False
 
-    assert message["before"] is None
-    assert list(message["after"].keys()) == ["id", "updated_at"]
+    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].part_of_pkey == 0
+    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].optional is True
+
+    assert message.before is None
+    assert list(message.after.keys()) == ["id", "updated_at"]
     # TODO these types should be cast correctly at some point
-    assert message["after"]["id"] == "10"
-    assert message["after"]["updated_at"] == "2020-01-01 00:00:00+00"
+    assert message.after["id"] == "10"
+    assert message.after["updated_at"] == "2020-01-01 00:00:00+00"
 
 
 # TODO: ordering of these tests is dependent on the names and should not be
-def test_002_update(cursor, configure_test_db):
+def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("UPDATE public.integration SET updated_at = '2020-02-01 00:00:00+00' WHERE id = 10;")
     message = next(cdc_reader)
-    assert message["op"] == "U"
-    assert message["source"]["db"] == "test_db"
-    assert message["source"]["schema"] == "public"
-    assert message["source"]["table"] == "integration"
+    assert message.op == "U"
+    assert message.table_schema.db == "test_db"
+    assert message.table_schema.schema == "public"
+    assert message.table_schema.table == "integration"
 
-    assert message["table_schema"][0]["name"] == "id"
-    assert message["table_schema"][0]["part_of_pkey"] == 1
-    assert message["table_schema"][0]["type"] == "integer"
-    assert message["table_schema"][0]["optional"] is False
+    assert message.table_schema.column_definitions[0].name == "id"
+    assert message.table_schema.column_definitions[0].part_of_pkey == 1
+    assert message.table_schema.column_definitions[0].type_name == "integer"
+    assert message.table_schema.column_definitions[0].optional is False
 
-    assert message["table_schema"][1]["name"] == "updated_at"
-    assert message["table_schema"][1]["part_of_pkey"] == 0
-    assert message["table_schema"][1]["type"] == "timestamp with time zone"
-    assert message["table_schema"][1]["optional"] is True
+    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].part_of_pkey == 0
+    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].optional is True
     # TODO check what happens with replica identity full?
-    assert message["before"] is None
-    assert list(message["after"].keys()) == ["id", "updated_at"]
+    assert message.before is None
+    assert list(message.after.keys()) == ["id", "updated_at"]
     # TODO these types should be cast correctly at some point
-    assert message["after"]["id"] == "10"
-    assert message["after"]["updated_at"] == "2020-02-01 00:00:00+00"
+    assert message.after["id"] == "10"
+    assert message.after["updated_at"] == "2020-02-01 00:00:00+00"
 
 
-def test_003_delete(cursor, configure_test_db):
+def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("DELETE FROM public.integration WHERE id = 10;")
     message = next(cdc_reader)
-    assert message["op"] == "D"
-    assert message["source"]["db"] == "test_db"
-    assert message["source"]["schema"] == "public"
-    assert message["source"]["table"] == "integration"
+    assert message.op == "D"
+    assert message.table_schema.db == "test_db"
+    assert message.table_schema.schema == "public"
+    assert message.table_schema.table == "integration"
 
-    assert message["table_schema"][0]["name"] == "id"
-    assert message["table_schema"][0]["part_of_pkey"] == 1
-    assert message["table_schema"][0]["type"] == "integer"
-    assert message["table_schema"][0]["optional"] is False
+    assert message.table_schema.column_definitions[0].name == "id"
+    assert message.table_schema.column_definitions[0].part_of_pkey == 1
+    assert message.table_schema.column_definitions[0].type_name == "integer"
+    assert message.table_schema.column_definitions[0].optional is False
 
-    assert message["table_schema"][1]["name"] == "updated_at"
-    assert message["table_schema"][1]["part_of_pkey"] == 0
-    assert message["table_schema"][1]["type"] == "timestamp with time zone"
-    assert message["table_schema"][1]["optional"] is True
-    assert message["before"]["id"] == "10"
-    assert message["before"]["updated_at"] is None  # check what happens with replica identity
-    assert message["after"] is None
+    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].part_of_pkey == 0
+    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].optional is True
+    assert message.before["id"] == "10"
+    # TODO: check and test what happens with replica identity
+    assert message.before["updated_at"] is None
+    assert message.after is None
 
 
-def test_004_truncate(cursor, configure_test_db):
+def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
     cdc_reader = configure_test_db
     cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (11, '2020-01-01 00:00:00+00');")
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
     assert cursor.fetchone()["n"] == 1
     insert_msg = next(cdc_reader)
-    assert insert_msg["op"] == "I"
+    assert insert_msg.op == "I"
     cursor.execute("TRUNCATE public.integration;")
     message = next(cdc_reader)
-    assert message["op"] == "T"
-    assert message["source"]["db"] == "test_db"
-    assert message["source"]["schema"] == "public"
-    assert message["source"]["table"] == "integration"
+    assert message.op == "T"
+    assert message.table_schema.db == "test_db"
+    assert message.table_schema.schema == "public"
+    assert message.table_schema.table == "integration"
 
-    assert message["table_schema"][0]["name"] == "id"
-    assert message["table_schema"][0]["part_of_pkey"] == 1
-    assert message["table_schema"][0]["type"] == "integer"
-    assert message["table_schema"][0]["optional"] is False
+    assert message.table_schema.column_definitions[0].name == "id"
+    assert message.table_schema.column_definitions[0].part_of_pkey == 1
+    assert message.table_schema.column_definitions[0].type_name == "integer"
+    assert message.table_schema.column_definitions[0].optional is False
 
-    assert message["table_schema"][1]["name"] == "updated_at"
-    assert message["table_schema"][1]["part_of_pkey"] == 0
-    assert message["table_schema"][1]["type"] == "timestamp with time zone"
-    assert message["table_schema"][1]["optional"] is True
-    assert message["before"] is None
-    assert message["after"] is None
+    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].part_of_pkey == 0
+    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].optional is True
+    assert message.before is None
+    assert message.after is None

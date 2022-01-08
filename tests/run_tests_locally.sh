@@ -18,6 +18,5 @@ until psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "select 1" > /dev/
 done
 
 # PYTHON variable comes from this script being run from the Makefile
-${PYTHON} -m coverage run --concurrency=multiprocessing -m pytest -vv tests/
-${PYTHON} -m coverage combine
+${PYTHON} -m coverage run -m pytest -vv tests/
 ${PYTHON} -m coverage report -m

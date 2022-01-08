@@ -22,6 +22,7 @@ $(INSTALL_STAMP): setup.py tests/requirements-dev.txt
 .PHONY: test
 test: venv
 	${PYTHON} -m coverage run --omit="tests/*" -m pytest -vv tests/
+	${PYTHON} -m coverage combine
 	${PYTHON} -m coverage report -m
 
 .PHONY: test-local

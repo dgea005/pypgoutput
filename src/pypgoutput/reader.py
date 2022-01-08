@@ -51,6 +51,7 @@ class LogicalReplicationReader:
         self.extractor = ExtractRaw(
             pipe_conn=self.pipe_in_conn, dsn=self.dsn, publication_name=self.publication_name, slot_name=self.slot_name
         )
+        self.extractor.connect()
         self.extractor.start()
         # TODO: make some aspect of this output configurable, raw msg return
         self.raw_msgs = self.read_raw_extracted()
@@ -109,23 +110,27 @@ class ExtractRaw(Process):
         self.publication_name = publication_name
         self.slot_name = slot_name
         self.pipe_conn = pipe_conn
+        self.conn = None
+        self.cur = None
+
+    def connect(self) -> None:
+        self.conn = psycopg2.connect(self.dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
+        self.cur = self.conn.cursor()
 
     def run(self) -> None:
-        conn = psycopg2.connect(self.dsn, connection_factory=psycopg2.extras.LogicalReplicationConnection)
-        cur = conn.cursor()
         replication_options = {"publication_names": self.publication_name, "proto_version": "1"}
         try:
-            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
+            self.cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         except psycopg2.ProgrammingError:
-            cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
-            cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
+            self.cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
+            self.cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         try:
             logger.info(f"Starting replication from slot: {self.slot_name}")
-            cur.consume_stream(self.msg_consumer)
+            self.cur.consume_stream(self.msg_consumer)
         except Exception as err:
             logger.error(f"Error consuming stream from slot: '{self.slot_name}'. {err}")
-            cur.close()
-            conn.close()
+            self.cur.close()
+            self.conn.close()
 
     def msg_consumer(self, msg):
         message_id = uuid.uuid4()

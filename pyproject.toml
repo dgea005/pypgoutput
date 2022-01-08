@@ -23,3 +23,15 @@ profile = "black"
 multi_line_output = 3
 line_length = 88
 include_trailing_comma = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+  "def __repr__"
+]
+
+[tool.coverage.run]
+branch = false
+omit=[
+  "tests/*"
+]

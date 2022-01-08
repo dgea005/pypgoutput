@@ -13,7 +13,7 @@ from pypgoutput.decoders import (
     Update,
     decode_message,
 )
-from pypgoutput.reader import ChangeEvent, LogicalReplicationReader
+from pypgoutput.reader import ChangeEvent, ExtractRaw, LogicalReplicationReader
 from pypgoutput.utils import QueryError, SourceDBHandler
 
 __all__ = [
@@ -34,4 +34,5 @@ __all__ = [
     "LogicalReplicationReader",
     "QueryError",
     "ChangeEvent",
+    "ExtractRaw",
 ]

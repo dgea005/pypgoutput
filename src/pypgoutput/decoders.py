@@ -34,6 +34,9 @@ class ColumnData:
     col_data_length: Optional[int] = None
     col_data: Optional[str] = None
 
+    def __repr__(self) -> str:
+        return f"[col_data_category='{self.col_data_category}', col_data_length={self.col_data_length}, col_data='{self.col_data}']"
+
 
 @dataclass(frozen=True)
 class ColumnType:
@@ -51,7 +54,7 @@ class TupleData:
     column_data: Optional[List[ColumnData]]
 
     def __repr__(self):
-        return f"( n_columns : {self.n_columns}, data : {self.column_data})"
+        return f"n_columns: {self.n_columns}, data: {self.column_data}"
 
 
 class PgoutputMessage(ABC):
@@ -62,11 +65,11 @@ class PgoutputMessage(ABC):
 
     @abstractmethod
     def decode_buffer(self):
-        pass
+        """Decoding is implemented for each message type"""
 
     @abstractmethod
     def __repr__(self):
-        pass
+        """Implemented for each message type"""
 
     def read_int8(self) -> int:
         return convert_bytes_to_int(self.buffer.read(INT8))
@@ -106,6 +109,7 @@ class PgoutputMessage(ABC):
                 Int32 Length of the column value.
                 Byten The value of the column, in text format. (A future release might support additional formats.) n is the above length.
         """
+        # TODO: investigate what happens with the generated columns
         column_data = list()
         n_columns = self.read_int16()
         for column in range(n_columns):
@@ -124,9 +128,6 @@ class PgoutputMessage(ABC):
                         col_data=col_data,
                     )
                 )
-            else:
-                # what happens with the generated columns? should an empty ColumnData be returned?
-                pass
         return TupleData(n_columns=n_columns, column_data=column_data)
 
 
@@ -148,7 +149,7 @@ class Begin(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "B":
-            raise Exception("first byte in buffer does not match Begin message")
+            raise ValueError("first byte in buffer does not match Begin message")
         self.lsn = self.read_int64()
         self.commit_ts = self.read_timestamp()
         self.tx_xid = self.read_int64()
@@ -156,8 +157,8 @@ class Begin(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"BEGIN \n\tbyte1: '{self.byte1}', \n\tLSN : {self.lsn}, "
-            f"\n\tcommit_ts {self.commit_ts}, \n\ttx_xid : {self.tx_xid}"
+            f"BEGIN \n\tbyte1: '{self.byte1}', \n\tLSN: {self.lsn}, "
+            f"\n\tcommit_ts {self.commit_ts}, \n\ttx_xid: {self.tx_xid}"
         )
 
 
@@ -178,7 +179,7 @@ class Commit(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "C":
-            raise Exception("first byte in buffer does not match Commit message")
+            raise ValueError("first byte in buffer does not match Commit message")
         self.flags = self.read_utf8()
         self.lsn_commit = self.read_int64()
         self.lsn = self.read_int64()
@@ -187,8 +188,8 @@ class Commit(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"COMMIT \n\tbyte1: {self.byte1}, \n\tflags {self.flags}, \n\tlsn_commit : {self.lsn_commit} "
-            f"\n\tLSN : {self.lsn}, \n\tcommit_ts {self.commit_ts}"
+            f"COMMIT \n\tbyte1: {self.byte1}, \n\tflags {self.flags}, \n\tlsn_commit: {self.lsn_commit}"
+            f"\n\tLSN: {self.lsn}, \n\tcommit_ts {self.commit_ts}"
         )
 
 
@@ -228,12 +229,11 @@ class Relation(PgoutputMessage):
     relation_name: str
     replica_identity_setting: str
     n_columns: int
-    # TODO define column type, could eventually look this up from the DB
     columns: List[ColumnType]
 
     def decode_buffer(self):
         if self.byte1 != "R":
-            raise Exception("first byte in buffer does not match Relation message")
+            raise ValueError("first byte in buffer does not match Relation message")
         self.relation_id = self.read_int32()
         self.namespace = self.read_string()
         self.relation_name = self.read_string()
@@ -259,10 +259,10 @@ class Relation(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"RELATION \n\tbyte1 : '{self.byte1}', \n\trelation_id : {self.relation_id}"
-            f",\n\tnamespace/schema : '{self.namespace}',\n\trelation_name : '{self.relation_name}'"
-            f",\n\treplica_identity_setting : '{self.replica_identity_setting}',\n\tn_columns : {self.n_columns} "
-            f",\n\tcolumns : {self.columns}"
+            f"RELATION \n\tbyte1: '{self.byte1}', \n\trelation_id: {self.relation_id}"
+            f",\n\tnamespace/schema: '{self.namespace}',\n\trelation_name: '{self.relation_name}'"
+            f",\n\treplica_identity_setting: '{self.replica_identity_setting}',\n\tn_columns: {self.n_columns} "
+            f",\n\tcolumns: {self.columns}"
         )
 
 
@@ -294,7 +294,7 @@ class Insert(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "I":
-            raise Exception(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
+            raise ValueError(f"first byte in buffer does not match Insert message (expected 'I', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         self.new_tuple_byte = self.read_utf8()
         self.new_tuple = self.read_tuple_data()
@@ -302,8 +302,8 @@ class Insert(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"INSERT \n\tbyte1: '{self.byte1}', \n\trelation_id : {self.relation_id} "
-            f"\n\tnew tuple byte: '{self.new_tuple_byte}', \n\tnew_tuple : {self.new_tuple}"
+            f"INSERT \n\tbyte1: '{self.byte1}', \n\trelation_id: {self.relation_id} "
+            f"\n\tnew tuple byte: '{self.new_tuple_byte}', \n\tnew_tuple: {self.new_tuple}"
         )
 
 
@@ -332,7 +332,7 @@ class Update(PgoutputMessage):
         self.optional_tuple_identifier = None
         self.old_tuple = None
         if self.byte1 != "U":
-            raise Exception(f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'")
+            raise ValueError(f"first byte in buffer does not match Update message (expected 'U', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         # TODO test update to PK, test update with REPLICA IDENTITY = FULL
         self.next_byte_identifier = self.read_utf8()  # one of K, O or N
@@ -343,7 +343,8 @@ class Update(PgoutputMessage):
         else:
             self.new_tuple_byte = self.next_byte_identifier
         if self.new_tuple_byte != "N":
-            raise Exception(
+            # TODO: test exception handling
+            raise ValueError(
                 f"did not find new_tuple_byte ('N') at position: {self.buffer.tell()}, found: '{self.new_tuple_byte}'"
             )
         self.new_tuple = self.read_tuple_data()
@@ -351,9 +352,9 @@ class Update(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"UPDATE \n\tbyte1: '{self.byte1}', \n\trelation_id : {self.relation_id} "
-            f" \n\toptional_tuple_identifier : '{self.optional_tuple_identifier}', \n\toptional_old_tuple_data : {self.old_tuple} "
-            f" \n\tnew_tuple_byte : '{self.new_tuple_byte}', \n\tnew_tuple : {self.new_tuple}"
+            f"UPDATE \n\tbyte1: '{self.byte1}', \n\trelation_id: {self.relation_id}"
+            f"\n\toptional_tuple_identifier: '{self.optional_tuple_identifier}', \n\toptional_old_tuple_data: {self.old_tuple}"
+            f"\n\tnew_tuple_byte: '{self.new_tuple_byte}', \n\tnew_tuple: {self.new_tuple}"
         )
 
 
@@ -375,18 +376,19 @@ class Delete(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "D":
-            raise Exception(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
+            raise ValueError(f"first byte in buffer does not match Delete message (expected 'D', got '{self.byte1}'")
         self.relation_id = self.read_int32()
         self.message_type = self.read_utf8()
+        # TODO: test with replica identity full
         if self.message_type not in ["K", "O"]:
-            raise Exception(f"message type byte is not 'K' or 'O', got : '{self.message_type}'")
+            raise ValueError(f"message type byte is not 'K' or 'O', got: '{self.message_type}'")
         self.old_tuple = self.read_tuple_data()
         return self
 
     def __repr__(self):
         return (
-            f"DELETE \n\tbyte1: {self.byte1} \n\trelation_id : {self.relation_id} "
-            f"\n\tmessage_type : {self.message_type} \n\told_tuple : {self.old_tuple}"
+            f"DELETE \n\tbyte1: {self.byte1} \n\trelation_id: {self.relation_id} "
+            f"\n\tmessage_type: {self.message_type} \n\told_tuple: {self.old_tuple}"
         )
 
 
@@ -405,7 +407,7 @@ class Truncate(PgoutputMessage):
 
     def decode_buffer(self):
         if self.byte1 != "T":
-            raise Exception(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
+            raise ValueError(f"first byte in buffer does not match Truncate message (expected 'T', got '{self.byte1}'")
         self.number_of_relations = self.read_int32()
         self.option_bits = self.read_int8()
         self.relation_ids = []
@@ -414,8 +416,8 @@ class Truncate(PgoutputMessage):
 
     def __repr__(self):
         return (
-            f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations : {self.number_of_relations} "
-            f"option_bits : {self.option_bits}, relation_ids : {self.relation_ids}   "
+            f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations: {self.number_of_relations} "
+            f"option_bits: {self.option_bits}, relation_ids: {self.relation_ids}"
         )
 
 

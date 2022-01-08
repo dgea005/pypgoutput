@@ -1,9 +1,11 @@
 import logging
+import multiprocessing
 import os
 from typing import Generator
 
 import psycopg2
 import psycopg2.errors
+import psycopg2.extensions
 import psycopg2.extras
 import pytest
 
@@ -190,3 +192,17 @@ def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEven
     assert message.table_schema.column_definitions[1].optional is True
     assert message.before is None
     assert message.after is None
+
+
+def test_005_extractor_error(cursor):
+    """before
+    src/pypgoutput/reader.py       168     29    83%   74, 85, 90-93, 114-128, 131-146
+    """
+    pipe_out_conn, pipe_in_conn = multiprocessing.Pipe(duplex=True)
+    dsn = psycopg2.extensions.make_dsn(host=HOST, database=DATABASE_NAME, port=PORT, user=USER, password=PASSWORD)
+    extractor = pypgoutput.ExtractRaw(
+        dsn=dsn, publication_name=PUBLICATION_NAME, slot_name=SLOT_NAME, pipe_conn=pipe_in_conn
+    )
+    extractor.connect()
+    with pytest.raises(psycopg2.errors.ObjectInUse):
+        extractor.run()

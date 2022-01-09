@@ -66,14 +66,14 @@ Output:
       {
         "name": "id",
         "part_of_pkey": 1,
-        "type_id": 1,
+        "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
         "part_of_pkey": 0,
-        "type_id": 0,
+        "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }
@@ -103,14 +103,14 @@ Output:
       {
         "name": "id",
         "part_of_pkey": 1,
-        "type_id": 1,
+        "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
         "part_of_pkey": 0,
-        "type_id": 0,
+        "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }
@@ -140,14 +140,14 @@ Output:
       {
         "name": "id",
         "part_of_pkey": 1,
-        "type_id": 1,
+        "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
         "part_of_pkey": 0,
-        "type_id": 0,
+        "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }

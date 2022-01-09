@@ -51,7 +51,7 @@ def configure_test_db(cursor):
     try:
         cursor.execute(f"SELECT pg_drop_replication_slot('{SLOT_NAME}');")
     except psycopg2.errors.UndefinedObject as err:
-        logger.warning(f"slot {SLOT_NAME} could not be dropped because it does not exist", err)
+        logger.warning(f"slot {SLOT_NAME} could not be dropped because it does not exist. {err}")
     cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
     cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
     cdc_reader = pypgoutput.LogicalReplicationReader(
@@ -90,8 +90,6 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert cursor.fetchone()["n"] == 1
 
     message = next(cdc_reader)
-    # print(json.dumps(message, indent=2, default=str))
-
     assert message.op == "I"
     assert message.table_schema.db == "test_db"
     assert message.table_schema.schema == "public"
@@ -101,11 +99,21 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert message.table_schema.column_definitions[0].part_of_pkey == 1
     assert message.table_schema.column_definitions[0].type_name == "integer"
     assert message.table_schema.column_definitions[0].optional is False
-
     assert message.table_schema.column_definitions[1].name == "updated_at"
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
     assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
     assert message.table_schema.column_definitions[1].optional is True
+
+    query = "SELECT oid, typname FROM pg_type WHERE oid = %s::oid;"
+    cursor.execute(query, vars=(message.table_schema.column_definitions[0].type_id,))
+    result = cursor.fetchone()
+    assert result["oid"] == message.table_schema.column_definitions[0].type_id
+    assert result["typname"] == "int4"  # integer
+
+    cursor.execute(query, vars=(message.table_schema.column_definitions[1].type_id,))
+    result = cursor.fetchone()
+    assert result["oid"] == message.table_schema.column_definitions[1].type_id
+    assert result["typname"] == "timestamptz"
 
     assert message.before is None
     assert list(message.after.keys()) == ["id", "updated_at"]
@@ -195,9 +203,6 @@ def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEven
 
 
 def test_005_extractor_error(cursor):
-    """before
-    src/pypgoutput/reader.py       168     29    83%   74, 85, 90-93, 114-128, 131-146
-    """
     pipe_out_conn, pipe_in_conn = multiprocessing.Pipe(duplex=True)
     dsn = psycopg2.extensions.make_dsn(host=HOST, database=DATABASE_NAME, port=PORT, user=USER, password=PASSWORD)
     extractor = pypgoutput.ExtractRaw(

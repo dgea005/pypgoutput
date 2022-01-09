@@ -148,7 +148,7 @@ class ExtractRaw(Process):
             msg.cursor.send_feedback(flush_lsn=msg.data_start)
             logger.debug(f"Flushed message: '{str(message_id)}'")
         else:
-            logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {msg.data_start}")
+            logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {str(msg.data_start)}")
 
 
 @dataclass
@@ -246,7 +246,7 @@ def transform_raw_to_change_event(
                     ColumnDefinition(
                         name=column.name,
                         part_of_pkey=column.part_of_pkey,
-                        type_id=column.part_of_pkey,
+                        type_id=column.type_id,
                         type_name=pg_types[column.type_id],
                         optional=is_optional,
                     )

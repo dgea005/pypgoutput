@@ -42,6 +42,7 @@ cdc_reader.stop()
 ```
 
 Generate some change messages
+
 ```{sql}
 CREATE TABLE public.readme (id integer primary key, created_at timestamptz default now());
 
@@ -49,6 +50,7 @@ INSERT INTO public.readme (id) SELECT data FROM generate_series(1, 3) AS data;
 ```
 
 Output:
+
 ```{json}
 {
   "op": "I",

@@ -1,6 +1,6 @@
 # pypgoutput
 
-Python package to read, parse and convert PostgreSQL logical decoding messages and convert to CDC messages. Built using psycopg2's logical replication support objects and the built in Postgres pgoutput plugin.
+Python package to read, parse and convert PostgreSQL logical decoding messages to CDC messages. Built using psycopg2's logical replication support objects and the built in Postgres pgoutput plugin.
 
 ## Example
 

@@ -1,6 +1,7 @@
 import logging
 import multiprocessing
 import os
+from datetime import datetime, timezone
 from typing import Generator
 
 import psycopg2
@@ -92,7 +93,7 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     message = next(cdc_reader)
     assert message.op == "I"
     assert message.table_schema.db == "test_db"
-    assert message.table_schema.schema == "public"
+    assert message.table_schema.schema_name == "public"
     assert message.table_schema.table == "integration"
 
     assert message.table_schema.column_definitions[0].name == "id"
@@ -117,9 +118,10 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
 
     assert message.before is None
     assert list(message.after.keys()) == ["id", "updated_at"]
-    # TODO these types should be cast correctly at some point
-    assert message.after["id"] == "10"
-    assert message.after["updated_at"] == "2020-01-01 00:00:00+00"
+    assert message.after["id"] == 10
+    assert message.after["updated_at"] == datetime.strptime(
+        "2020-01-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
+    ).replace(tzinfo=timezone.utc)
 
 
 # TODO: ordering of these tests is dependent on the names and should not be
@@ -130,7 +132,7 @@ def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     message = next(cdc_reader)
     assert message.op == "U"
     assert message.table_schema.db == "test_db"
-    assert message.table_schema.schema == "public"
+    assert message.table_schema.schema_name == "public"
     assert message.table_schema.table == "integration"
 
     assert message.table_schema.column_definitions[0].name == "id"
@@ -145,9 +147,10 @@ def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     # TODO check what happens with replica identity full?
     assert message.before is None
     assert list(message.after.keys()) == ["id", "updated_at"]
-    # TODO these types should be cast correctly at some point
-    assert message.after["id"] == "10"
-    assert message.after["updated_at"] == "2020-02-01 00:00:00+00"
+    assert message.after["id"] == 10
+    assert message.after["updated_at"] == datetime.strptime(
+        "2020-02-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
+    ).replace(tzinfo=timezone.utc)
 
 
 def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
@@ -157,7 +160,7 @@ def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     message = next(cdc_reader)
     assert message.op == "D"
     assert message.table_schema.db == "test_db"
-    assert message.table_schema.schema == "public"
+    assert message.table_schema.schema_name == "public"
     assert message.table_schema.table == "integration"
 
     assert message.table_schema.column_definitions[0].name == "id"
@@ -169,7 +172,7 @@ def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
     assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
     assert message.table_schema.column_definitions[1].optional is True
-    assert message.before["id"] == "10"
+    assert message.before["id"] == 10
     # TODO: check and test what happens with replica identity
     assert message.before["updated_at"] is None
     assert message.after is None
@@ -186,7 +189,7 @@ def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEven
     message = next(cdc_reader)
     assert message.op == "T"
     assert message.table_schema.db == "test_db"
-    assert message.table_schema.schema == "public"
+    assert message.table_schema.schema_name == "public"
     assert message.table_schema.table == "integration"
 
     assert message.table_schema.column_definitions[0].name == "id"

@@ -1,17 +1,17 @@
 import logging
 import multiprocessing
 import time
+import typing
 import uuid
 from collections import OrderedDict
-from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing.connection import Connection
 from multiprocessing.context import Process
-from typing import AnyStr, Dict, Generator, List, Optional, TypedDict
 
 import psycopg2
 import psycopg2.extensions
 import psycopg2.extras
+import pydantic
 
 from pypgoutput.decoders import TupleData, decode_message
 from pypgoutput.utils import SourceDBHandler
@@ -19,9 +19,8 @@ from pypgoutput.utils import SourceDBHandler
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class ReplicationMessage:
-    message_id: uuid.uuid4
+class ReplicationMessage(pydantic.BaseModel):
+    message_id: pydantic.UUID4
     data_start: int
     payload: bytes
     send_time: datetime
@@ -40,7 +39,7 @@ class LogicalReplicationReader:
            from previous messages and by looking up values in the source DBs catalog
     """
 
-    def __init__(self, publication_name: AnyStr, slot_name: AnyStr, dsn: Optional[AnyStr] = None, **kwargs) -> None:
+    def __init__(self, publication_name: str, slot_name: str, dsn: typing.Optional[str] = None, **kwargs) -> None:
         self.dsn = psycopg2.extensions.make_dsn(dsn=dsn, **kwargs)
         self.publication_name = publication_name
         self.slot_name = slot_name
@@ -65,7 +64,7 @@ class LogicalReplicationReader:
         self.pipe_out_conn.close()
         self.pipe_in_conn.close()
 
-    def read_raw_extracted(self) -> Generator[ReplicationMessage, None, None]:
+    def read_raw_extracted(self) -> typing.Generator[ReplicationMessage, None, None]:
         """yields ReplicationMessages from the pipe as written by extractor process"""
         empty_count = 0
         iter_count = 0
@@ -151,51 +150,48 @@ class ExtractRaw(Process):
             logger.warning(f"Could not confirm message: {str(message_id)}. Did not flush at {str(msg.data_start)}")
 
 
-@dataclass
-class ColumnDefinition:
-    name: AnyStr
+class ColumnDefinition(pydantic.BaseModel):
+    name: str
     part_of_pkey: bool
     type_id: int
-    type_name: AnyStr
+    type_name: str
     optional: bool
 
 
-@dataclass
-class TableSchema:
-    column_definitions: List[ColumnDefinition]
-    db: AnyStr
-    schema: AnyStr
-    table: AnyStr
+class TableSchema(pydantic.BaseModel):
+    column_definitions: typing.List[ColumnDefinition]
+    db: str
+    schema_name: str
+    table: str
     relation_id: int
+    model: typing.Any  # pydantic model used for before/after tuple
 
 
-class Tables(TypedDict):
+class Tables(typing.TypedDict):
     # TypedDict is from PEP 589 https://www.python.org/dev/peps/pep-0589/
     relation_id: TableSchema
 
 
-class PgTypes(TypedDict):
+class PgTypes(typing.TypedDict):
     """Mapping of DB internal type_id to human readable name"""
 
     type_id: str
 
 
-@dataclass(frozen=True)
-class Transaction:
+class Transaction(pydantic.BaseModel):
     tx_id: int
     begin_lsn: int
     commit_ts: datetime
 
 
-@dataclass(frozen=True)
-class ChangeEvent:
-    op: AnyStr  # (ENUM of I, U, D, T)
-    message_id: uuid.uuid4
+class ChangeEvent(pydantic.BaseModel):
+    op: str  # (ENUM of I, U, D, T)
+    message_id: pydantic.UUID4
     lsn: int
     transaction: Transaction  # replication/source metadata
     table_schema: TableSchema
-    before: Optional[Dict]
-    after: Optional[Dict]
+    before: typing.Optional[typing.Dict]  # depends on the source table
+    after: typing.Optional[typing.Dict]
 
 
 def map_tuple_to_dict(tuple_data: TupleData, relation: TableSchema) -> OrderedDict:
@@ -207,9 +203,23 @@ def map_tuple_to_dict(tuple_data: TupleData, relation: TableSchema) -> OrderedDi
     return output
 
 
+def convert_pg_type_to_py_type(pg_type_name: str) -> type:
+    """try out PEP-636 https://docs.python.org/3/whatsnew/3.10.html#pep-634-structural-pattern-matching"""
+    match pg_type_name:
+        case "bigint" | "integer" | "smallint":
+            return int
+        case "timestamp with time zone" | "timestamp without time zone":
+            return datetime
+        # json not tested yet
+        case "json" | "jsonb":
+            return dict
+        case _:
+            return str
+
+
 def transform_raw_to_change_event(
-    message_stream: Generator[ReplicationMessage, None, None], dsn: str
-) -> Generator[ChangeEvent, None, None]:
+    message_stream: typing.Generator[ReplicationMessage, None, None], dsn: str
+) -> typing.Generator[ChangeEvent, None, None]:
     """Convert raw messages to change events
 
     Replication protocol https://www.postgresql.org/docs/12/protocol-logical-replication.html
@@ -251,12 +261,17 @@ def transform_raw_to_change_event(
                         optional=is_optional,
                     )
                 )
+            schema_mapping_args = {
+                c.name: (convert_pg_type_to_py_type(c.type_name), None if c.optional else ...)
+                for c in column_definitions
+            }
             table_schemas[relation_id] = TableSchema(
                 db=database,
-                schema=decoded_msg.namespace,
+                schema_name=decoded_msg.namespace,
                 table=decoded_msg.relation_name,
                 column_definitions=column_definitions,
                 relation_id=relation_id,
+                model=pydantic.create_model(f"DynamicSchemaModel_{relation_id}", **schema_mapping_args),
             )
 
         elif decoded_msg.byte1 == "B":
@@ -284,8 +299,8 @@ def transform_raw_to_change_event(
                 lsn=msg.data_start,
                 transaction=transaction_metadata,
                 table_schema=table_schemas[relation_id],
-                before=before,
-                after=after,
+                before=table_schemas[relation_id].model(**before) if before else None,
+                after=table_schemas[relation_id].model(**after) if after else None,
             )
             yield payload
 

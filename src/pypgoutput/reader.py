@@ -57,13 +57,13 @@ class ChangeEvent(pydantic.BaseModel):
     lsn: int
     transaction: Transaction  # replication/source metadata
     table_schema: TableSchema
-    before: typing.Optional[typing.Dict]  # depends on the source table
-    after: typing.Optional[typing.Dict]
+    before: typing.Optional[typing.Dict[str, typing.Any]]  # depends on the source table
+    after: typing.Optional[typing.Dict[str, typing.Any]]
 
 
-def map_tuple_to_dict(tuple_data: decoders.TupleData, relation: TableSchema) -> OrderedDict:
+def map_tuple_to_dict(tuple_data: decoders.TupleData, relation: TableSchema) -> typing.OrderedDict[str, typing.Any]:
     """Convert tuple data to an OrderedDict with keys from relation mapped in order to tuple data"""
-    output = OrderedDict()
+    output: typing.OrderedDict[str, typing.Any] = OrderedDict()
     for idx, col in enumerate(tuple_data.column_data):
         column_name = relation.column_definitions[idx].name
         output[column_name] = col.col_data
@@ -109,7 +109,13 @@ class LogicalReplicationReader:
            from previous messages and by looking up values in the source DBs catalog
     """
 
-    def __init__(self, publication_name: str, slot_name: str, dsn: typing.Optional[str] = None, **kwargs) -> None:
+    def __init__(
+        self,
+        publication_name: str,
+        slot_name: str,
+        dsn: typing.Optional[str] = None,
+        **kwargs: typing.Dict[str, typing.Any],
+    ) -> None:
         self.dsn = psycopg2.extensions.make_dsn(dsn=dsn, **kwargs)
         self.publication_name = publication_name
         self.slot_name = slot_name
@@ -120,7 +126,7 @@ class LogicalReplicationReader:
 
         self.setup()
 
-    def setup(self):
+    def setup(self) -> None:
         self.pipe_out_conn, self.pipe_in_conn = multiprocessing.Pipe(duplex=True)
         self.extractor = ExtractRaw(
             pipe_conn=self.pipe_in_conn, dsn=self.dsn, publication_name=self.publication_name, slot_name=self.slot_name
@@ -278,10 +284,11 @@ class LogicalReplicationReader:
                 after=None,
             )
 
-    def __iter__(self):
+    # how to put a better type hint?
+    def __iter__(self) -> typing.Any:
         return self
 
-    def __next__(self):
+    def __next__(self) -> ChangeEvent:
         try:
             return next(self.transformed_msgs)
         except Exception as err:
@@ -300,7 +307,7 @@ class ExtractRaw(Process):
     https://www.psycopg.org/docs/extras.html#psycopg2.extras.ReplicationCursor.consume_stream
     """
 
-    def __init__(self, dsn: str, publication_name: str, slot_name: str, pipe_conn: Connection):
+    def __init__(self, dsn: str, publication_name: str, slot_name: str, pipe_conn: Connection) -> None:
         Process.__init__(self)
         self.dsn = dsn
         self.publication_name = publication_name
@@ -326,7 +333,7 @@ class ExtractRaw(Process):
             self.cur.close()
             self.conn.close()
 
-    def msg_consumer(self, msg: psycopg2.extras.ReplicationMessage):
+    def msg_consumer(self, msg: psycopg2.extras.ReplicationMessage) -> None:
         message_id = uuid.uuid4()
         message = ReplicationMessage(
             message_id=message_id,

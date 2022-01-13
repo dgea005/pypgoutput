@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import List
 
 import psycopg2
 import psycopg2.extras
@@ -16,7 +16,7 @@ class ResourceError(Exception):
 
 
 class SourceDBHandler:
-    def __init__(self, dsn):
+    def __init__(self, dsn: str):
         self.dsn = dsn
         self.connect()
 
@@ -24,14 +24,14 @@ class SourceDBHandler:
         self.conn: psycopg2.connection = psycopg2.connect(self.dsn)
         self.conn.autocommit = True
 
-    def fetchone(self, query) -> Dict[str, Any]:
+    def fetchone(self, query: str) -> psycopg2.extras.DictRow:
         try:
             cursor = psycopg2.extras.DictCursor(self.conn)
         except Exception as err:
             raise ResourceError("Could not get cursor") from err
         try:
             cursor.execute(query)
-            result: Dict[str, Any] = cursor.fetchone()
+            result: psycopg2.extras.DictRow = cursor.fetchone()
             return result
         except Exception as err:
             self.conn.rollback()
@@ -39,14 +39,14 @@ class SourceDBHandler:
         finally:
             cursor.close()
 
-    def fetch(self, query) -> List[Dict[str, Any]]:
+    def fetch(self, query: str) -> List[psycopg2.extras.DictRow]:
         try:
             cursor = psycopg2.extras.DictCursor(self.conn)
         except Exception as err:
             raise ResourceError("Could not get cursor") from err
         try:
             cursor.execute(query)
-            result: List[Dict[str, Any]] = cursor.fetchall()
+            result: List[psycopg2.extras.DictRow] = cursor.fetchall()
             return result
         except Exception as err:
             self.conn.rollback()
@@ -71,5 +71,5 @@ class SourceDBHandler:
         # attnotnull returns if column has not null constraint, we want to flip it
         return False if result["attnotnull"] else True
 
-    def close(self):
+    def close(self) -> None:
         self.conn.close()

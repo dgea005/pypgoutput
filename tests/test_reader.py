@@ -73,7 +73,10 @@ def configure_test_db(cursor):
     cursor.execute(query)
     yield cdc_reader
     logger.info("Closing test CDC reader")
-    cdc_reader.stop()
+    try:
+        cdc_reader.stop()
+    except Exception as err:
+        logger.warning("Test failed but reader is already closed", err)
 
 
 def test_000_dummy_test(cursor):

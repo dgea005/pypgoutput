@@ -11,7 +11,6 @@ from pypgoutput.decoders import (
     Truncate,
     TupleData,
     Update,
-    decode_message,
 )
 from pypgoutput.reader import ChangeEvent, ExtractRaw, LogicalReplicationReader
 from pypgoutput.utils import QueryError, SourceDBHandler
@@ -27,7 +26,6 @@ __all__ = [
     "Update",
     "Delete",
     "Truncate",
-    "decode_message",
     "ColumnData",
     "ColumnType",
     "SourceDBHandler",

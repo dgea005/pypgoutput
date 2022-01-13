@@ -28,9 +28,9 @@ test: venv
 test-local: venv
 	./tests/run_tests_locally.sh
 
-.PHONY: check-format
-check-format: venv
-	${PYTHON} -m black --config=pyproject.toml --check src/ tests/
+.PHONY: mypy
+mypy: venv
+	${PYTHON} -m mypy src
 
 .PHONY: format
 format: venv

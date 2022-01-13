@@ -35,3 +35,8 @@ branch = false
 omit=[
   "tests/*"
 ]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+plugins = "pydantic.mypy"

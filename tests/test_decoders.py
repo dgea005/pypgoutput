@@ -134,9 +134,3 @@ def test_tuple_data():
     assert test_tuple.column_data[0].col_data_category == "t"
     assert test_tuple.column_data[0].col_data_length == 1
     assert test_tuple.column_data[0].col_data == "1"
-
-
-# def test_decode_func():
-#     message = b"Z\x00\x00\x00\x01\x00\x00\x00@\x01"
-#     decoded = pypgoutput.decode_message(message)
-#     assert decoded is None

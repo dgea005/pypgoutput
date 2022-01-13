@@ -34,6 +34,8 @@ jobs:
           python-version: '3.10'
       - name: lint
         run: make lint
+      - name: mypy
+        run: make mypy
       - name: test
         env:
         # follows libpq env conventions https://www.postgresql.org/docs/12/libpq-envars.html

@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import Any, Dict, List
 
 import psycopg2
 import psycopg2.extras
@@ -11,33 +11,48 @@ class QueryError(Exception):
     pass
 
 
+class ResourceError(Exception):
+    pass
+
+
 class SourceDBHandler:
     def __init__(self, dsn):
         self.dsn = dsn
         self.connect()
 
-    def connect(self):
-        self.conn = psycopg2.connect(self.dsn)
+    def connect(self) -> None:
+        self.conn: psycopg2.connection = psycopg2.connect(self.dsn)
         self.conn.autocommit = True
-        self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    def fetchone(self, query):
+    def fetchone(self, query) -> Dict[str, Any]:
         try:
-            self.cur.execute(query)
-            result = self.cur.fetchone()
+            cursor = psycopg2.extras.DictCursor(self.conn)
+        except Exception as err:
+            raise ResourceError("Could not get cursor") from err
+        try:
+            cursor.execute(query)
+            result: Dict[str, Any] = cursor.fetchone()
             return result
         except Exception as err:
             self.conn.rollback()
             raise QueryError("Error running query") from err
+        finally:
+            cursor.close()
 
-    def fetch(self, query) -> List:
+    def fetch(self, query) -> List[Dict[str, Any]]:
         try:
-            self.cur.execute(query)
-            result = self.cur.fetchall()
+            cursor = psycopg2.extras.DictCursor(self.conn)
+        except Exception as err:
+            raise ResourceError("Could not get cursor") from err
+        try:
+            cursor.execute(query)
+            result: List[Dict[str, Any]] = cursor.fetchall()
             return result
         except Exception as err:
             self.conn.rollback()
             raise QueryError("Error running query") from err
+        finally:
+            cursor.close()
 
     def fetch_column_type(self, type_id: int, atttypmod: int) -> str:
         """Get formatted data type name"""
@@ -57,5 +72,4 @@ class SourceDBHandler:
         return False if result["attnotnull"] else True
 
     def close(self):
-        self.cur.close()
         self.conn.close()

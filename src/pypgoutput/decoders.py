@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 # integer byte lengths
 INT8 = 1
@@ -50,8 +50,8 @@ class ColumnType:
 
 @dataclass(frozen=True)
 class TupleData:
-    n_columns: Optional[int]
-    column_data: Optional[List[ColumnData]]
+    n_columns: int
+    column_data: Iterable[ColumnData]
 
     def __repr__(self):
         return f"n_columns: {self.n_columns}, data: {self.column_data}"
@@ -419,28 +419,3 @@ class Truncate(PgoutputMessage):
             f"TRUNCATE \n\tbyte1: {self.byte1} \n\tn_relations: {self.number_of_relations} "
             f"option_bits: {self.option_bits}, relation_ids: {self.relation_ids}"
         )
-
-
-def decode_message(
-    _input_bytes: bytes,
-) -> Optional[Union[Begin, Commit, Relation, Insert, Update, Delete, Truncate]]:
-    """Peak first byte and initialise the appropriate message object"""
-    first_byte = (_input_bytes[:1]).decode("utf-8")
-    if first_byte == "B":
-        output = Begin(_input_bytes)
-    elif first_byte == "C":
-        output = Commit(_input_bytes)
-    elif first_byte == "R":
-        output = Relation(_input_bytes)
-    elif first_byte == "I":
-        output = Insert(_input_bytes)
-    elif first_byte == "U":
-        output = Update(_input_bytes)
-    elif first_byte == "D":
-        output = Delete(_input_bytes)
-    elif first_byte == "T":
-        output = Truncate(_input_bytes)
-    else:
-        logger.error(f"warning unrecognised message {_input_bytes}")
-        output = None
-    return output

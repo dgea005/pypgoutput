@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-import pypgoutput
 from pypgoutput import ColumnData, ColumnType, TupleData, decoders
 
 
@@ -137,7 +136,7 @@ def test_tuple_data():
     assert test_tuple.column_data[0].col_data == "1"
 
 
-def test_decode_func():
-    message = b"Z\x00\x00\x00\x01\x00\x00\x00@\x01"
-    decoded = pypgoutput.decode_message(message)
-    assert decoded is None
+# def test_decode_func():
+#     message = b"Z\x00\x00\x00\x01\x00\x00\x00@\x01"
+#     decoded = pypgoutput.decode_message(message)
+#     assert decoded is None

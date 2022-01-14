@@ -16,8 +16,6 @@ SELECT * FROM pg_create_logical_replication_slot('test_slot', 'pgoutput');
 Second, run the script to collect the changes:
 
 ```{python}
-import dataclasses
-import json
 import os
 import pypgoutput
 
@@ -38,7 +36,7 @@ cdc_reader = pypgoutput.LogicalReplicationReader(
                 password=PASSWORD,
             )
 for message in cdc_reader:
-    print(json.dumps(dataclasses.asdict(message), indent=2, default=str))
+    print(message.json(indent=2))
 
 cdc_reader.stop()
 ```
@@ -56,116 +54,115 @@ Output:
 ```{json}
 {
   "op": "I",
-  "message_id": "9602eeed-d350-4fb7-8edb-8a0952d51f55",
-  "lsn": 23721984,
+  "message_id": "4606b12b-ab41-41e6-9717-7ce92f8a9857",
+  "lsn": 23530912,
   "transaction": {
-    "tx_id": 501,
-    "begin_lsn": 23723440,
-    "commit_ts": "2022-01-09 00:15:02.627549+00:00"
+    "tx_id": 499,
+    "begin_lsn": 23531416,
+    "commit_ts": "2022-01-14T17:22:10.298334+00:00"
   },
   "table_schema": {
     "column_definitions": [
       {
         "name": "id",
-        "part_of_pkey": 1,
+        "part_of_pkey": true,
         "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
-        "part_of_pkey": 0,
+        "part_of_pkey": false,
         "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }
     ],
     "db": "test_db",
-    "schema": "public",
+    "schema_name": "public",
     "table": "readme",
-    "relation_id": 16408
+    "relation_id": 16403
   },
   "before": null,
   "after": {
-    "id": "1",
-    "created_at": "2022-01-09 00:15:02.625822+00"
+    "id": 1,
+    "created_at": "2022-01-14T17:22:10.296740+00:00"
   }
 }
 {
   "op": "I",
-  "message_id": "e18b71b7-1942-433e-8761-c6325c48dea6",
-  "lsn": 23722216,
+  "message_id": "1ede0643-42b6-4bb1-8a98-8e4ca10c7915",
+  "lsn": 23531144,
   "transaction": {
-    "tx_id": 501,
-    "begin_lsn": 23723440,
-    "commit_ts": "2022-01-09 00:15:02.627549+00:00"
+    "tx_id": 499,
+    "begin_lsn": 23531416,
+    "commit_ts": "2022-01-14T17:22:10.298334+00:00"
   },
   "table_schema": {
     "column_definitions": [
       {
         "name": "id",
-        "part_of_pkey": 1,
+        "part_of_pkey": true,
         "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
-        "part_of_pkey": 0,
+        "part_of_pkey": false,
         "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }
     ],
     "db": "test_db",
-    "schema": "public",
+    "schema_name": "public",
     "table": "readme",
-    "relation_id": 16408
+    "relation_id": 16403
   },
   "before": null,
   "after": {
-    "id": "2",
-    "created_at": "2022-01-09 00:15:02.625822+00"
+    "id": 2,
+    "created_at": "2022-01-14T17:22:10.296740+00:00"
   }
 }
 {
   "op": "I",
-  "message_id": "30e38600-dcd2-4394-b144-8234f9280241",
-  "lsn": 23722352,
+  "message_id": "fb477de5-8281-4102-96ee-649a838d38f2",
+  "lsn": 23531280,
   "transaction": {
-    "tx_id": 501,
-    "begin_lsn": 23723440,
-    "commit_ts": "2022-01-09 00:15:02.627549+00:00"
+    "tx_id": 499,
+    "begin_lsn": 23531416,
+    "commit_ts": "2022-01-14T17:22:10.298334+00:00"
   },
   "table_schema": {
     "column_definitions": [
       {
         "name": "id",
-        "part_of_pkey": 1,
+        "part_of_pkey": true,
         "type_id": 23,
         "type_name": "integer",
         "optional": false
       },
       {
         "name": "created_at",
-        "part_of_pkey": 0,
+        "part_of_pkey": false,
         "type_id": 1184,
         "type_name": "timestamp with time zone",
         "optional": true
       }
     ],
     "db": "test_db",
-    "schema": "public",
+    "schema_name": "public",
     "table": "readme",
-    "relation_id": 16408
+    "relation_id": 16403
   },
   "before": null,
   "after": {
-    "id": "3",
-    "created_at": "2022-01-09 00:15:02.625822+00"
+    "id": 3,
+    "created_at": "2022-01-14T17:22:10.296740+00:00"
   }
 }
-
 ```
 
 ## Why use this package?

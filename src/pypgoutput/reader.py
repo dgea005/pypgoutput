@@ -42,7 +42,6 @@ class TableSchema(pydantic.BaseModel):
     schema_name: str
     table: str
     relation_id: int
-    model: typing.Type[pydantic.BaseModel]  # pydantic model used for before/after tuple
 
 
 class Transaction(pydantic.BaseModel):
@@ -122,6 +121,8 @@ class LogicalReplicationReader:
 
         # transform data containers
         self.table_schemas: typing.Dict[int, TableSchema] = dict()  # map relid to table schema
+        # value pydantic model applied to before/after tuple
+        self.table_models: typing.Dict[int, typing.Type[pydantic.BaseModel]] = dict()
         self.pg_types: typing.Dict[int, str] = dict()  # map type oid to readable name
 
         self.setup()
@@ -212,13 +213,13 @@ class LogicalReplicationReader:
         schema_mapping_args: typing.Dict[str, typing.Any] = {
             c.name: (convert_pg_type_to_py_type(c.type_name), None if c.optional else ...) for c in column_definitions
         }
+        self.table_models[relation_id] = pydantic.create_model(f"DynamicSchemaModel_{relation_id}", **schema_mapping_args)
         self.table_schemas[relation_id] = TableSchema(
             db=self.database,
             schema_name=relation_msg.namespace,
             table=relation_msg.relation_name,
             column_definitions=column_definitions,
             relation_id=relation_id,
-            model=pydantic.create_model(f"DynamicSchemaModel_{relation_id}", **schema_mapping_args),
         )
 
     def process_begin(self, message: ReplicationMessage) -> Transaction:
@@ -236,7 +237,7 @@ class LogicalReplicationReader:
             transaction=transaction,
             table_schema=self.table_schemas[relation_id],
             before=None,
-            after=self.table_schemas[relation_id].model(**after),
+            after=self.table_models[relation_id](**after),
         )
 
     def process_update(self, message: ReplicationMessage, transaction: Transaction) -> ChangeEvent:
@@ -251,8 +252,8 @@ class LogicalReplicationReader:
             lsn=message.data_start,
             transaction=transaction,
             table_schema=self.table_schemas[relation_id],
-            before=self.table_schemas[relation_id].model(**before) if decoded_msg.old_tuple else None,
-            after=self.table_schemas[relation_id].model(**after),
+            before=self.table_models[relation_id](**before) if decoded_msg.old_tuple else None,
+            after=self.table_models[relation_id](**after),
         )
 
     def process_delete(self, message: ReplicationMessage, transaction: Transaction) -> ChangeEvent:
@@ -265,7 +266,7 @@ class LogicalReplicationReader:
             lsn=message.data_start,
             transaction=transaction,
             table_schema=self.table_schemas[relation_id],
-            before=self.table_schemas[relation_id].model(**before),
+            before=self.table_models[relation_id](**before),
             after=None,
         )
 

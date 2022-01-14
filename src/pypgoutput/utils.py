@@ -16,7 +16,7 @@ class ResourceError(Exception):
 
 
 class SourceDBHandler:
-    def __init__(self, dsn: str):
+    def __init__(self, dsn: str) -> None:
         self.dsn = dsn
         self.connect()
 

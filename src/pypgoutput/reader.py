@@ -213,7 +213,9 @@ class LogicalReplicationReader:
         schema_mapping_args: typing.Dict[str, typing.Any] = {
             c.name: (convert_pg_type_to_py_type(c.type_name), None if c.optional else ...) for c in column_definitions
         }
-        self.table_models[relation_id] = pydantic.create_model(f"DynamicSchemaModel_{relation_id}", **schema_mapping_args)
+        self.table_models[relation_id] = pydantic.create_model(
+            f"DynamicSchemaModel_{relation_id}", **schema_mapping_args
+        )
         self.table_schemas[relation_id] = TableSchema(
             db=self.database,
             schema_name=relation_msg.namespace,

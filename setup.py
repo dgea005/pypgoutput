@@ -23,6 +23,5 @@ setuptools.setup(
     install_requires=[
           'psycopg2-binary',
           'pydantic',
-          'types-psycopg2'
     ],
 )

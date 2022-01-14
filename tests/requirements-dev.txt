@@ -5,3 +5,4 @@ pytest==6.2.5
 coverage[toml]==6.2
 pydantic==1.9.0
 mypy==0.931
+types-psycopg2==2.9.6

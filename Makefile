@@ -30,7 +30,7 @@ test-local: venv
 
 .PHONY: mypy
 mypy: venv
-	${PYTHON} -m mypy src
+	${PYTHON} -m mypy src/ tests/
 
 .PHONY: format
 format: venv

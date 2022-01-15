@@ -1,5 +1,6 @@
 import logging
 import os
+import typing
 
 import psycopg2
 import psycopg2.extras
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="module")
-def connection():
+def cursor() -> typing.Generator[psycopg2.extras.DictCursor, None, None]:
     connection = psycopg2.connect(
         host=HOST,
         database=DATABASE_NAME,
@@ -29,19 +30,14 @@ def connection():
         password=PASSWORD,
     )
     connection.autocommit = True
-    yield connection
+    curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    yield curs
+    curs.close()
     connection.close()
 
 
 @pytest.fixture(scope="module")
-def cursor(connection):
-    curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    yield curs
-    curs.close()
-
-
-@pytest.fixture(scope="module")
-def table(cursor):
+def table(cursor: psycopg2.extras.DictCursor) -> None:
     query = """
     DROP TABLE IF EXISTS public.utils_test CASCADE;
     CREATE TABLE public.utils (
@@ -52,7 +48,7 @@ def table(cursor):
     cursor.execute(query)
 
 
-def test_source_db_handler_fetchone():
+def test_source_db_handler_fetchone() -> None:
     handler = pypgoutput.SourceDBHandler(dsn=DSN)
     handler.connect()
     result = handler.fetchone("SELECT 1 AS n;")
@@ -63,7 +59,7 @@ def test_source_db_handler_fetchone():
     handler.close()
 
 
-def test_source_db_handler_fetch():
+def test_source_db_handler_fetch() -> None:
     handler = pypgoutput.SourceDBHandler(dsn=DSN)
     handler.connect()
     result = handler.fetch("SELECT n FROM generate_series(0, 5) AS n;")
@@ -74,7 +70,7 @@ def test_source_db_handler_fetch():
     handler.close()
 
 
-def test_source_db_handler_column_optional(table):
+def test_source_db_handler_column_optional(table: typing.Callable[[None], None]) -> None:
     handler = pypgoutput.SourceDBHandler(dsn=DSN)
     handler.connect()
     result = handler.fetch_if_column_is_optional(table_schema="public", table_name="utils", column_name="c0")
@@ -86,7 +82,9 @@ def test_source_db_handler_column_optional(table):
     handler.close()
 
 
-def test_source_db_handler_column_type(cursor, table):
+def test_source_db_handler_column_type(
+    cursor: psycopg2.extras.DictCursor, table: typing.Callable[[None], None]
+) -> None:
     cursor.execute("SELECT oid FROM pg_type WHERE typname='timestamptz'")
     oid = cursor.fetchone()
     handler = pypgoutput.SourceDBHandler(dsn=DSN)

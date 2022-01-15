@@ -5,7 +5,7 @@ import pytest
 from pypgoutput import ColumnData, ColumnType, TupleData, decoders
 
 
-def test_relation_message():
+def test_relation_message() -> None:
     message = b"R\x00\x00@\x01public\x00test_table\x00d\x00\x02\x01id\x00\x00\x00\x00\x17\xff\xff\xff\xff\x00created\x00\x00\x00\x04\xa0\xff\xff\xff\xff"
     decoded_msg = decoders.Relation(message)
     assert decoded_msg.byte1 == "R"
@@ -27,7 +27,7 @@ def test_relation_message():
         decoded_msg = decoders.Relation(message)
 
 
-def test_begin_message():
+def test_begin_message() -> None:
     message = b"B\x00\x00\x00\x00\x01f4\x98\x00\x02ck\xd8i\x8a1\x00\x00\x01\xeb"
     decoded_msg = decoders.Begin(message)
     assert decoded_msg.byte1 == "B"
@@ -44,7 +44,7 @@ def test_begin_message():
         decoded_msg = decoders.Begin(message)
 
 
-def test_insert_message():
+def test_insert_message() -> None:
     message = b"I\x00\x00@\x01N\x00\x02t\x00\x00\x00\x015t\x00\x00\x00\x162012-01-01 12:00:00+00"
     decoded_msg = decoders.Insert(message)
     assert decoded_msg.byte1 == "I"
@@ -68,7 +68,7 @@ def test_insert_message():
         decoded_msg = decoders.Insert(message)
 
 
-def test_update_message():
+def test_update_message() -> None:
     message = b"U\x00\x00@\x01N\x00\x02t\x00\x00\x00\x015t\x00\x00\x00\x162013-01-01 12:00:00+00"
     decoded_msg = decoders.Update(message)
     assert decoded_msg.byte1 == "U"
@@ -81,7 +81,7 @@ def test_update_message():
         decoded_msg = decoders.Update(message)
 
 
-def test_delete_message():
+def test_delete_message() -> None:
     message = b"D\x00\x00@\x01K\x00\x02t\x00\x00\x00\x014n"
     decoded_msg = decoders.Delete(message)
     assert decoded_msg.byte1 == "D"
@@ -94,7 +94,7 @@ def test_delete_message():
         decoded_msg = decoders.Delete(message)
 
 
-def test_commit_message():
+def test_commit_message() -> None:
     message = b"C\x00\x00\x00\x00\x00\x01f4\x98\x00\x00\x00\x00\x01f4\xc8\x00\x02cl\x83\x8f\xd2\xa1"
     decoded_msg = decoders.Commit(message)
     assert decoded_msg.byte1 == "C"
@@ -111,7 +111,7 @@ def test_commit_message():
         decoded_msg = decoders.Commit(message)
 
 
-def test_truncate_message():
+def test_truncate_message() -> None:
     message = b"T\x00\x00\x00\x01\x00\x00\x00@\x01"
     decoded_msg = decoders.Truncate(message)
     assert decoded_msg.byte1 == "T"
@@ -126,7 +126,7 @@ def test_truncate_message():
         decoded_msg = decoders.Truncate(message)
 
 
-def test_tuple_data():
+def test_tuple_data() -> None:
     test_tuple = TupleData(
         n_columns=1, column_data=[ColumnData(col_data_length=1, col_data="1", col_data_category="t")]
     )

@@ -1,11 +1,11 @@
 import logging
 import multiprocessing
 import os
+import typing
 from datetime import datetime, timezone
-from typing import Generator
 
 import psycopg2
-import psycopg2.errors
+import psycopg2.errors as psycopg_errors
 import psycopg2.extensions
 import psycopg2.extras
 import pytest
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="module")
-def connection():
+def cursor() -> typing.Generator[psycopg2.extras.DictCursor, None, None]:
     connection = psycopg2.connect(
         host=HOST,
         database=DATABASE_NAME,
@@ -35,23 +35,20 @@ def connection():
         password=PASSWORD,
     )
     connection.autocommit = True
-    yield connection
+    curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    yield curs
+    curs.close()
     connection.close()
 
 
 @pytest.fixture(scope="module")
-def cursor(connection):
-    curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    yield curs
-    curs.close()
-
-
-@pytest.fixture(scope="module")
-def configure_test_db(cursor):
+def configure_test_db(
+    cursor: psycopg2.extras.DictCursor,
+) -> typing.Generator[pypgoutput.LogicalReplicationReader, None, None]:
     cursor.execute(f"DROP PUBLICATION IF EXISTS {PUBLICATION_NAME};")
     try:
         cursor.execute(f"SELECT pg_drop_replication_slot('{SLOT_NAME}');")
-    except psycopg2.errors.UndefinedObject as err:
+    except psycopg_errors.UndefinedObject as err:
         logger.warning(f"slot {SLOT_NAME} could not be dropped because it does not exist. {err}")
     cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
     cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
@@ -79,14 +76,16 @@ def configure_test_db(cursor):
         logger.warning("Test failed but reader is already closed", err)
 
 
-def test_000_dummy_test(cursor):
+def test_000_dummy_test(cursor: psycopg2.extras.DictCursor) -> None:
     """make sure connection/cursor and DB is operational for tests"""
     cursor.execute("SELECT 1 as n;")
     result = cursor.fetchone()
     assert result["n"] == 1
 
 
-def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
+def test_001_insert(
+    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+) -> None:
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (10, '2020-01-01 00:00:00+00');")
@@ -120,6 +119,7 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert result["typname"] == "timestamptz"
 
     assert message.before is None
+    assert message.after is not None
     assert list(message.after.keys()) == ["id", "updated_at"]
     assert message.after["id"] == 10
     assert message.after["updated_at"] == datetime.strptime(
@@ -128,7 +128,9 @@ def test_001_insert(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
 
 
 # TODO: ordering of these tests is dependent on the names and should not be
-def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
+def test_002_update(
+    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+) -> None:
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("UPDATE public.integration SET updated_at = '2020-02-01 00:00:00+00' WHERE id = 10;")
@@ -149,6 +151,7 @@ def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert message.table_schema.column_definitions[1].optional is True
     # TODO check what happens with replica identity full?
     assert message.before is None
+    assert message.after is not None
     assert list(message.after.keys()) == ["id", "updated_at"]
     assert message.after["id"] == 10
     assert message.after["updated_at"] == datetime.strptime(
@@ -156,7 +159,9 @@ def test_002_update(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     ).replace(tzinfo=timezone.utc)
 
 
-def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
+def test_003_delete(
+    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+) -> None:
     """with default replica identity"""
     cdc_reader = configure_test_db
     cursor.execute("DELETE FROM public.integration WHERE id = 10;")
@@ -175,13 +180,16 @@ def test_003_delete(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent,
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
     assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
     assert message.table_schema.column_definitions[1].optional is True
+    assert message.before is not None
     assert message.before["id"] == 10
     # TODO: check and test what happens with replica identity
     assert message.before["updated_at"] is None
     assert message.after is None
 
 
-def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEvent, None, None]):
+def test_004_truncate(
+    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+) -> None:
     cdc_reader = configure_test_db
     cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (11, '2020-01-01 00:00:00+00');")
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
@@ -208,12 +216,12 @@ def test_004_truncate(cursor, configure_test_db: Generator[pypgoutput.ChangeEven
     assert message.after is None
 
 
-def test_005_extractor_error(cursor):
+def test_005_extractor_error(cursor: psycopg2.extras.DictCursor) -> None:
     pipe_out_conn, pipe_in_conn = multiprocessing.Pipe(duplex=True)
     dsn = psycopg2.extensions.make_dsn(host=HOST, database=DATABASE_NAME, port=PORT, user=USER, password=PASSWORD)
     extractor = pypgoutput.ExtractRaw(
         dsn=dsn, publication_name=PUBLICATION_NAME, slot_name=SLOT_NAME, pipe_conn=pipe_in_conn
     )
     extractor.connect()
-    with pytest.raises(psycopg2.errors.ObjectInUse):
+    with pytest.raises(psycopg_errors.ObjectInUse):
         extractor.run()

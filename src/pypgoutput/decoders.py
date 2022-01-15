@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, List, Optional, Union
+from typing import List, Optional, Union
 
 # integer byte lengths
 INT8 = 1
@@ -51,7 +51,7 @@ class ColumnType:
 @dataclass(frozen=True)
 class TupleData:
     n_columns: int
-    column_data: Iterable[ColumnData]
+    column_data: List[ColumnData]
 
     def __repr__(self) -> str:
         return f"n_columns: {self.n_columns}, data: {self.column_data}"

@@ -113,7 +113,7 @@ class LogicalReplicationReader:
         publication_name: str,
         slot_name: str,
         dsn: typing.Optional[str] = None,
-        **kwargs: typing.Dict[str, typing.Any],
+        **kwargs: typing.Optional[str],
     ) -> None:
         self.dsn = psycopg2.extensions.make_dsn(dsn=dsn, **kwargs)
         self.publication_name = publication_name

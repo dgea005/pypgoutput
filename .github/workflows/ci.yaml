@@ -50,7 +50,7 @@ jobs:
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: test_pw
-      PGPORT: ${{ job.services.postgres.ports[5432] }}
+      PGPORT: 5432
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2

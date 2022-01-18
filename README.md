@@ -2,7 +2,7 @@
 
 Python package to read, parse and convert PostgreSQL logical decoding messages to change data capture messages. Built using psycopg2's logical replication support objects and PostgreSQL's pgoutput plugin.
 
-Uses python 3.10
+Uses python >= 3.8
 
 ## Example
 

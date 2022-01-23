@@ -85,7 +85,6 @@ def map_tuple_to_dict(tuple_data: decoders.TupleData, relation: TableSchema) -> 
 
 
 def convert_pg_type_to_py_type(pg_type_name: str) -> type:
-    """try out PEP-636 https://docs.python.org/3/whatsnew/3.10.html#pep-634-structural-pattern-matching"""
     if pg_type_name == "bigint" or pg_type_name == "integer" or pg_type_name == "smallint":
         return int
     elif pg_type_name == "timestamp with time zone" or pg_type_name == "timestamp without time zone":

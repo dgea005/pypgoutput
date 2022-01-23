@@ -1,21 +1,34 @@
 # pypgoutput
 
-Python package to read, parse and convert PostgreSQL logical decoding messages to change data capture messages. Built using psycopg2's logical replication support objects and PostgreSQL's pgoutput plugin.
+Python package to read, parse and convert PostgreSQL logical decoding messages to change data capture messages. Built using psycopg2's logical replication support objects, PostgreSQL's pgoutput plugin and Pydantic.
 
 Uses python >= 3.8
 
+## Installation
+
+```console
+$ pip install pypgoutput
+```
+
+## How it works
+
+* Replication messages are consumed via psycopg2's replication connection. <https://www.psycopg.org/docs/extras.html#replication-support-objects>
+* The binary messages from pgoutput logical decoding are parsed in the `decoders.py` module.
+* Parsed messages are converted to change events and yieled from the `LogicalReplicationReader`
+* Change events are nested Pydantic models where the tuple data (before/after) schema is dynamically generated depending on the table being processed.
+
 ## Example
 
-First setup publication and slot in the DB:
+First, setup a publication and a logical replication slot in the source database.
 
-```{sql}
+```sql
 CREATE PUBLICATION test_pub FOR ALL TABLES;
 SELECT * FROM pg_create_logical_replication_slot('test_slot', 'pgoutput');
 ```
 
 Second, run the script to collect the changes:
 
-```{python}
+```py
 import os
 import pypgoutput
 
@@ -43,7 +56,7 @@ cdc_reader.stop()
 
 Generate some change messages
 
-```{sql}
+```sql
 CREATE TABLE public.readme (id integer primary key, created_at timestamptz default now());
 
 INSERT INTO public.readme (id) SELECT data FROM generate_series(1, 3) AS data;
@@ -51,7 +64,7 @@ INSERT INTO public.readme (id) SELECT data FROM generate_series(1, 3) AS data;
 
 Output:
 
-```{json}
+```json
 {
   "op": "I",
   "message_id": "4606b12b-ab41-41e6-9717-7ce92f8a9857",

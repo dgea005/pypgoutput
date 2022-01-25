@@ -4,6 +4,8 @@ Python package to read, parse and convert PostgreSQL logical decoding messages t
 
 Uses python >= 3.8
 
+Developed on PostgreSQL 12 for now.
+
 ## Installation
 
 ```console

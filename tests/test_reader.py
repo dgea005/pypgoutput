@@ -65,6 +65,8 @@ def configure_test_db(
     query = """DROP TABLE IF EXISTS public.integration CASCADE;
     CREATE TABLE public.integration (
         id integer primary key,
+        json_data jsonb,
+        amount numeric(10, 2),
         updated_at timestamptz
     );"""
     cursor.execute(query)
@@ -88,7 +90,9 @@ def test_001_insert(
 ) -> None:
     """with default replica identity"""
     cdc_reader = configure_test_db
-    cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (10, '2020-01-01 00:00:00+00');")
+    cursor.execute(
+        """INSERT INTO public.integration (id, json_data, amount, updated_at) VALUES (10, '{"data": 10}', 10.20, '2020-01-01 00:00:00+00');"""
+    )
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
     assert cursor.fetchone()["n"] == 1
 
@@ -102,10 +106,21 @@ def test_001_insert(
     assert message.table_schema.column_definitions[0].part_of_pkey == 1
     assert message.table_schema.column_definitions[0].type_name == "integer"
     assert message.table_schema.column_definitions[0].optional is False
-    assert message.table_schema.column_definitions[1].name == "updated_at"
+
+    assert message.table_schema.column_definitions[1].name == "json_data"
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
-    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].type_name == "jsonb"
     assert message.table_schema.column_definitions[1].optional is True
+
+    assert message.table_schema.column_definitions[2].name == "amount"
+    assert message.table_schema.column_definitions[2].part_of_pkey == 0
+    assert message.table_schema.column_definitions[2].type_name == "numeric(10,2)"
+    assert message.table_schema.column_definitions[2].optional is True
+
+    assert message.table_schema.column_definitions[3].name == "updated_at"
+    assert message.table_schema.column_definitions[3].part_of_pkey == 0
+    assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[3].optional is True
 
     query = "SELECT oid, typname FROM pg_type WHERE oid = %s::oid;"
     cursor.execute(query, vars=(message.table_schema.column_definitions[0].type_id,))
@@ -116,12 +131,24 @@ def test_001_insert(
     cursor.execute(query, vars=(message.table_schema.column_definitions[1].type_id,))
     result = cursor.fetchone()
     assert result["oid"] == message.table_schema.column_definitions[1].type_id
+    assert result["typname"] == "jsonb"
+
+    cursor.execute(query, vars=(message.table_schema.column_definitions[2].type_id,))
+    result = cursor.fetchone()
+    assert result["oid"] == message.table_schema.column_definitions[2].type_id
+    assert result["typname"] == "numeric"
+
+    cursor.execute(query, vars=(message.table_schema.column_definitions[3].type_id,))
+    result = cursor.fetchone()
+    assert result["oid"] == message.table_schema.column_definitions[3].type_id
     assert result["typname"] == "timestamptz"
 
     assert message.before is None
     assert message.after is not None
-    assert list(message.after.keys()) == ["id", "updated_at"]
+    assert list(message.after.keys()) == ["id", "json_data", "amount", "updated_at"]
     assert message.after["id"] == 10
+    assert message.after["json_data"] == {"data": 10}
+    assert message.after["amount"] == 10.2
     assert message.after["updated_at"] == datetime.strptime(
         "2020-01-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
     ).replace(tzinfo=timezone.utc)
@@ -145,15 +172,27 @@ def test_002_update(
     assert message.table_schema.column_definitions[0].type_name == "integer"
     assert message.table_schema.column_definitions[0].optional is False
 
-    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].name == "json_data"
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
-    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].type_name == "jsonb"
     assert message.table_schema.column_definitions[1].optional is True
+
+    assert message.table_schema.column_definitions[2].name == "amount"
+    assert message.table_schema.column_definitions[2].part_of_pkey == 0
+    assert message.table_schema.column_definitions[2].type_name == "numeric(10,2)"
+    assert message.table_schema.column_definitions[2].optional is True
+
+    assert message.table_schema.column_definitions[3].name == "updated_at"
+    assert message.table_schema.column_definitions[3].part_of_pkey == 0
+    assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[3].optional is True
     # TODO check what happens with replica identity full?
     assert message.before is None
     assert message.after is not None
-    assert list(message.after.keys()) == ["id", "updated_at"]
+    assert list(message.after.keys()) == ["id", "json_data", "amount", "updated_at"]
     assert message.after["id"] == 10
+    assert message.after["json_data"] == {"data": 10}
+    assert message.after["amount"] == 10.2
     assert message.after["updated_at"] == datetime.strptime(
         "2020-02-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
     ).replace(tzinfo=timezone.utc)
@@ -176,13 +215,25 @@ def test_003_delete(
     assert message.table_schema.column_definitions[0].type_name == "integer"
     assert message.table_schema.column_definitions[0].optional is False
 
-    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].name == "json_data"
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
-    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].type_name == "jsonb"
     assert message.table_schema.column_definitions[1].optional is True
+
+    assert message.table_schema.column_definitions[2].name == "amount"
+    assert message.table_schema.column_definitions[2].part_of_pkey == 0
+    assert message.table_schema.column_definitions[2].type_name == "numeric(10,2)"
+    assert message.table_schema.column_definitions[2].optional is True
+
+    assert message.table_schema.column_definitions[3].name == "updated_at"
+    assert message.table_schema.column_definitions[3].part_of_pkey == 0
+    assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[3].optional is True
     assert message.before is not None
     assert message.before["id"] == 10
     # TODO: check and test what happens with replica identity
+    assert message.before["json_data"] is None
+    assert message.before["amount"] is None
     assert message.before["updated_at"] is None
     assert message.after is None
 
@@ -208,10 +259,20 @@ def test_004_truncate(
     assert message.table_schema.column_definitions[0].type_name == "integer"
     assert message.table_schema.column_definitions[0].optional is False
 
-    assert message.table_schema.column_definitions[1].name == "updated_at"
+    assert message.table_schema.column_definitions[1].name == "json_data"
     assert message.table_schema.column_definitions[1].part_of_pkey == 0
-    assert message.table_schema.column_definitions[1].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[1].type_name == "jsonb"
     assert message.table_schema.column_definitions[1].optional is True
+
+    assert message.table_schema.column_definitions[2].name == "amount"
+    assert message.table_schema.column_definitions[2].part_of_pkey == 0
+    assert message.table_schema.column_definitions[2].type_name == "numeric(10,2)"
+    assert message.table_schema.column_definitions[2].optional is True
+
+    assert message.table_schema.column_definitions[3].name == "updated_at"
+    assert message.table_schema.column_definitions[3].part_of_pkey == 0
+    assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
+    assert message.table_schema.column_definitions[3].optional is True
     assert message.before is None
     assert message.after is None
 

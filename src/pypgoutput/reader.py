@@ -19,6 +19,10 @@ from pypgoutput.utils import SourceDBHandler
 logger = logging.getLogger(__name__)
 
 
+class PgoutputError(Exception):
+    pass
+
+
 class ReplicationMessage(pydantic.BaseModel):
     message_id: pydantic.UUID4
     data_start: int
@@ -91,7 +95,9 @@ def convert_pg_type_to_py_type(pg_type_name: str) -> type:
         return datetime
         # json not tested yet
     elif pg_type_name == "json" or pg_type_name == "jsonb":
-        return dict
+        return pydantic.Json
+    elif pg_type_name[:7] == "numeric":
+        return float
     else:
         return str
 
@@ -231,15 +237,18 @@ class LogicalReplicationReader:
         decoded_msg: decoders.Insert = decoders.Insert(message.payload)
         relation_id: int = decoded_msg.relation_id
         after = map_tuple_to_dict(tuple_data=decoded_msg.new_tuple, relation=self.table_schemas[relation_id])
-        return ChangeEvent(
-            op=decoded_msg.byte1,
-            message_id=message.message_id,
-            lsn=message.data_start,
-            transaction=transaction,
-            table_schema=self.table_schemas[relation_id],
-            before=None,
-            after=self.table_models[relation_id](**after),
-        )
+        try:
+            return ChangeEvent(
+                op=decoded_msg.byte1,
+                message_id=message.message_id,
+                lsn=message.data_start,
+                transaction=transaction,
+                table_schema=self.table_schemas[relation_id],
+                before=None,
+                after=self.table_models[relation_id](**after),
+            )
+        except Exception as exc:
+            raise PgoutputError(f"Error creating ChangeEvent: {exc}")
 
     def process_update(self, message: ReplicationMessage, transaction: Transaction) -> ChangeEvent:
         decoded_msg: decoders.Update = decoders.Update(message.payload)
@@ -247,44 +256,53 @@ class LogicalReplicationReader:
         if decoded_msg.old_tuple:
             before = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
         after = map_tuple_to_dict(tuple_data=decoded_msg.new_tuple, relation=self.table_schemas[relation_id])
-        return ChangeEvent(
-            op=decoded_msg.byte1,
-            message_id=message.message_id,
-            lsn=message.data_start,
-            transaction=transaction,
-            table_schema=self.table_schemas[relation_id],
-            before=self.table_models[relation_id](**before) if decoded_msg.old_tuple else None,
-            after=self.table_models[relation_id](**after),
-        )
+        try:
+            return ChangeEvent(
+                op=decoded_msg.byte1,
+                message_id=message.message_id,
+                lsn=message.data_start,
+                transaction=transaction,
+                table_schema=self.table_schemas[relation_id],
+                before=self.table_models[relation_id](**before) if decoded_msg.old_tuple else None,
+                after=self.table_models[relation_id](**after),
+            )
+        except Exception as exc:
+            raise PgoutputError(f"Error creating ChangeEvent: {exc}")
 
     def process_delete(self, message: ReplicationMessage, transaction: Transaction) -> ChangeEvent:
         decoded_msg: decoders.Delete = decoders.Delete(message.payload)
         relation_id: int = decoded_msg.relation_id
         before = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
-        return ChangeEvent(
-            op=decoded_msg.byte1,
-            message_id=message.message_id,
-            lsn=message.data_start,
-            transaction=transaction,
-            table_schema=self.table_schemas[relation_id],
-            before=self.table_models[relation_id](**before),
-            after=None,
-        )
+        try:
+            return ChangeEvent(
+                op=decoded_msg.byte1,
+                message_id=message.message_id,
+                lsn=message.data_start,
+                transaction=transaction,
+                table_schema=self.table_schemas[relation_id],
+                before=self.table_models[relation_id](**before),
+                after=None,
+            )
+        except Exception as exc:
+            raise PgoutputError(f"Error creating ChangeEvent: {exc}")
 
     def process_truncate(
         self, message: ReplicationMessage, transaction: Transaction
     ) -> typing.Generator[ChangeEvent, None, None]:
         decoded_msg: decoders.Truncate = decoders.Truncate(message.payload)
         for relation_id in decoded_msg.relation_ids:
-            yield ChangeEvent(
-                op=decoded_msg.byte1,
-                message_id=message.message_id,
-                lsn=message.data_start,
-                transaction=transaction,
-                table_schema=self.table_schemas[relation_id],
-                before=None,
-                after=None,
-            )
+            try:
+                yield ChangeEvent(
+                    op=decoded_msg.byte1,
+                    message_id=message.message_id,
+                    lsn=message.data_start,
+                    transaction=transaction,
+                    table_schema=self.table_schemas[relation_id],
+                    before=None,
+                    after=None,
+                )
+            except Exception as exc:
+                raise PgoutputError(f"Error creating ChangeEvent: {exc}")
 
     # how to put a better type hint?
     def __iter__(self) -> typing.Any:

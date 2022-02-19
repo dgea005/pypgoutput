@@ -126,9 +126,14 @@ class LogicalReplicationReader:
 
         # transform data containers
         self.table_schemas: typing.Dict[int, TableSchema] = dict()  # map relid to table schema
-        # value pydantic model applied to before/after tuple
+
+        # for each relation store pydantic model applied to be before/after tuple
+        # key only is the schema for before messages that only contain the PK column changes
+        self.key_only_table_models: typing.Dict[int, typing.Type[TableSchema]] = dict()
         self.table_models: typing.Dict[int, typing.Type[pydantic.BaseModel]] = dict()
-        self.pg_types: typing.Dict[int, str] = dict()  # map type oid to readable name
+
+        # save map of type oid to readable name
+        self.pg_types: typing.Dict[int, str] = dict()
 
         self.setup()
 
@@ -221,6 +226,19 @@ class LogicalReplicationReader:
         self.table_models[relation_id] = pydantic.create_model(
             f"DynamicSchemaModel_{relation_id}", **schema_mapping_args
         )
+
+        # key only schema definition
+        # this is for REPLICA IDENTITY DEFAULT setting where only the old PK values are replicated for Update and Deletes
+        # https://www.postgresql.org/docs/12/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY
+        key_only_schema_mapping_args: typing.Dict[str, typing.Any] = {
+            c.name: (convert_pg_type_to_py_type(c.type_name), None if c.optional else ...)
+            for c in column_definitions
+            if c.part_of_pkey is True
+        }
+        print(key_only_schema_mapping_args)
+        self.key_only_table_models[relation_id] = pydantic.create_model(
+            f"KeyDynamicSchemaModel_{relation_id}", **key_only_schema_mapping_args
+        )
         self.table_schemas[relation_id] = TableSchema(
             db=self.database,
             schema_name=relation_msg.namespace,
@@ -254,7 +272,14 @@ class LogicalReplicationReader:
         decoded_msg: decoders.Update = decoders.Update(message.payload)
         relation_id: int = decoded_msg.relation_id
         if decoded_msg.old_tuple:
-            before = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
+            before_raw = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
+            if decoded_msg.optional_tuple_identifier == "O":
+                before_typed = self.table_models[relation_id](**before_raw)
+            # if there is old tuple and not O then key only schema needed
+            else:
+                before_typed = self.key_only_table_models[relation_id](**before_raw)
+        else:
+            before_typed = None
         after = map_tuple_to_dict(tuple_data=decoded_msg.new_tuple, relation=self.table_schemas[relation_id])
         try:
             return ChangeEvent(
@@ -263,7 +288,7 @@ class LogicalReplicationReader:
                 lsn=message.data_start,
                 transaction=transaction,
                 table_schema=self.table_schemas[relation_id],
-                before=self.table_models[relation_id](**before) if decoded_msg.old_tuple else None,
+                before=before_typed,
                 after=self.table_models[relation_id](**after),
             )
         except Exception as exc:
@@ -272,7 +297,14 @@ class LogicalReplicationReader:
     def process_delete(self, message: ReplicationMessage, transaction: Transaction) -> ChangeEvent:
         decoded_msg: decoders.Delete = decoders.Delete(message.payload)
         relation_id: int = decoded_msg.relation_id
-        before = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
+        before_raw = map_tuple_to_dict(tuple_data=decoded_msg.old_tuple, relation=self.table_schemas[relation_id])
+        if decoded_msg.message_type == "O":
+            # O is from REPLICA IDENTITY FULL and therefore has all columns in before message
+            before_typed = self.table_models[relation_id](**before_raw)
+        else:
+            # message type is K and means only replica identity index is present in before tuple
+            # only DEFAULT is implemented so the index can only be the primary key
+            before_typed = self.key_only_table_models[relation_id](**before_raw)
         try:
             return ChangeEvent(
                 op=decoded_msg.byte1,
@@ -280,7 +312,7 @@ class LogicalReplicationReader:
                 lsn=message.data_start,
                 transaction=transaction,
                 table_schema=self.table_schemas[relation_id],
-                before=self.table_models[relation_id](**before),
+                before=before_typed,
                 after=None,
             )
         except Exception as exc:

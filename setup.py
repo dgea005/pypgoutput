@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pypgoutput",
-    version="0.0.2",
+    version="0.0.3",
     author="Daniel Geals",
     author_email="danielgeals@gmail.com",
     description="PostgreSQL CDC library using pgoutput and python",

@@ -67,7 +67,7 @@ def configure_test_db(
         id integer primary key,
         json_data jsonb,
         amount numeric(10, 2),
-        updated_at timestamptz
+        updated_at timestamptz not null
     );"""
     cursor.execute(query)
     yield cdc_reader
@@ -120,7 +120,7 @@ def test_001_insert(
     assert message.table_schema.column_definitions[3].name == "updated_at"
     assert message.table_schema.column_definitions[3].part_of_pkey == 0
     assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
-    assert message.table_schema.column_definitions[3].optional is True
+    assert message.table_schema.column_definitions[3].optional is False
 
     query = "SELECT oid, typname FROM pg_type WHERE oid = %s::oid;"
     cursor.execute(query, vars=(message.table_schema.column_definitions[0].type_id,))
@@ -185,7 +185,7 @@ def test_002_update(
     assert message.table_schema.column_definitions[3].name == "updated_at"
     assert message.table_schema.column_definitions[3].part_of_pkey == 0
     assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
-    assert message.table_schema.column_definitions[3].optional is True
+    assert message.table_schema.column_definitions[3].optional is False
     # TODO check what happens with replica identity full?
     assert message.before is None
     assert message.after is not None
@@ -228,13 +228,9 @@ def test_003_delete(
     assert message.table_schema.column_definitions[3].name == "updated_at"
     assert message.table_schema.column_definitions[3].part_of_pkey == 0
     assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
-    assert message.table_schema.column_definitions[3].optional is True
+    assert message.table_schema.column_definitions[3].optional is False
     assert message.before is not None
     assert message.before["id"] == 10
-    # TODO: check and test what happens with replica identity
-    assert message.before["json_data"] is None
-    assert message.before["amount"] is None
-    assert message.before["updated_at"] is None
     assert message.after is None
 
 
@@ -272,7 +268,7 @@ def test_004_truncate(
     assert message.table_schema.column_definitions[3].name == "updated_at"
     assert message.table_schema.column_definitions[3].part_of_pkey == 0
     assert message.table_schema.column_definitions[3].type_name == "timestamp with time zone"
-    assert message.table_schema.column_definitions[3].optional is True
+    assert message.table_schema.column_definitions[3].optional is False
     assert message.before is None
     assert message.after is None
 

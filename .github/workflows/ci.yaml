@@ -26,7 +26,7 @@ jobs:
     services:
       postgres:
         # Docker Hub image
-        image: "bitnami/postgresql:12.9.0"
+        image: ${{ matrix.postgres-image }}
         # Provide the password for postgres
         env:
           POSTGRESQL_PASSWORD: test_pw
@@ -44,6 +44,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.8', '3.9', '3.10']
+        postgres-image: ["bitnami/postgresql:12.9.0", "bitnami/postgresql:13.6.0"]
     env:
       # follows libpq env conventions https://www.postgresql.org/docs/12/libpq-envars.html
       PGDATABASE: test_db

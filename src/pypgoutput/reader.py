@@ -235,7 +235,6 @@ class LogicalReplicationReader:
             for c in column_definitions
             if c.part_of_pkey is True
         }
-        print(key_only_schema_mapping_args)
         self.key_only_table_models[relation_id] = pydantic.create_model(
             f"KeyDynamicSchemaModel_{relation_id}", **key_only_schema_mapping_args
         )

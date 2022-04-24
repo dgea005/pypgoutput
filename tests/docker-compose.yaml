@@ -1,6 +1,6 @@
 version: '3'
 services:
-  database:
+  database_v12:
     image: "bitnami/postgresql:12.9.0"
     ports:
       - 5432:5432
@@ -11,7 +11,20 @@ services:
       POSTGRES_PORT: 5432
       POSTGRESQL_WAL_LEVEL: logical
     volumes:
-      - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
+      - database_v12-data:/var/lib/postgresql/data/ 
+
+  database_v13:
+    image: "bitnami/postgresql:13.6.0"
+    ports:
+      - 5433:5432
+    environment:
+      POSTGRESQL_PASSWORD: test_pw
+      POSTGRES_DB: test_db
+      POSTGRES_PORT: 5432
+      POSTGRESQL_WAL_LEVEL: logical
+    volumes:
+      - database_v13-data:/var/lib/postgresql/data/ 
 
 volumes:
-    database-data: # named volumes can be managed easier using docker-compose
+    database_v12-data: 
+    database_v13-data: 

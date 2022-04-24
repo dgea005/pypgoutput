@@ -21,8 +21,11 @@ PASSWORD = os.environ.get("PGPASSWORD")
 PUBLICATION_NAME = "test_pub"
 SLOT_NAME = "test_slot"
 
-logging.basicConfig(level=logging.DEBUG, format="%(relativeCreated)6d %(processName)s %(message)s")
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("tests")
+log_handler = logging.StreamHandler()
+log_handler.setLevel(logging.INFO)
+logger.addHandler(log_handler)
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +39,10 @@ def cursor() -> typing.Generator[psycopg2.extras.DictCursor, None, None]:
     )
     connection.autocommit = True
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    version_query = "SELECT version();"
+    curs.execute(version_query)
+    result = curs.fetchone()
+    logger.info(f"PG test version: {result}")
     yield curs
     curs.close()
     connection.close()

@@ -343,8 +343,7 @@ class LogicalReplicationReader:
         try:
             return next(self.transformed_msgs)
         except Exception as err:
-            self.stop()  # try to close everything
-            logger.error(f"Error extracting LR logs: {err}")
+            self.stop()
             raise StopIteration from err
 
 

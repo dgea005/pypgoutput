@@ -1,10 +1,7 @@
-import logging
 from typing import List
 
 import psycopg2
 import psycopg2.extras
-
-logger = logging.getLogger(__name__)
 
 
 class QueryError(Exception):

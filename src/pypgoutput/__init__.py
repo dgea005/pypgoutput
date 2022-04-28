@@ -1,3 +1,5 @@
+import logging
+
 from pypgoutput.decoders import (
     Begin,
     ColumnData,
@@ -14,6 +16,8 @@ from pypgoutput.decoders import (
 )
 from pypgoutput.reader import ChangeEvent, ExtractRaw, LogicalReplicationReader
 from pypgoutput.utils import QueryError, SourceDBHandler
+
+logging.getLogger("pypgoutput").addHandler(logging.NullHandler())
 
 __all__ = [
     "PgoutputMessage",

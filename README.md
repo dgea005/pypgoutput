@@ -6,6 +6,8 @@ Uses python >= 3.8
 
 Developed on PostgreSQL 12 for now.
 
+**Warning**: this is a prototype and not production tested
+
 ## Installation
 
 ```console

@@ -1,5 +1,4 @@
 import io
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -10,8 +9,6 @@ INT8 = 1
 INT16 = 2
 INT32 = 4
 INT64 = 8
-
-logger = logging.getLogger(__name__)
 
 
 def convert_pg_ts(_ts_in_microseconds: int) -> datetime:

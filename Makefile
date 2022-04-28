@@ -9,6 +9,7 @@ PIP_REQUIRE_VIRTUALENV = true
 VENV?=dev-venv
 INSTALL_STAMP := $(VENV)/.install.stamp
 PYTHON=${VENV}/bin/python3
+ROOT_PATH := $(shell git rev-parse --show-toplevel)
 
 venv: $(INSTALL_STAMP)
 
@@ -39,6 +40,7 @@ format: venv
 
 .PHONY: lint
 lint: venv
+	(! find ${ROOT_PATH}/src -name '*.py' | xargs  grep -F 'print' | grep -P '.') || echo "Print statement(s) found" | exit 1
 	${PYTHON} -m flake8 --ignore=W503,E501 src/ tests/
 	${PYTHON} -m isort src/ tests/ --check-only
 	${PYTHON} -m black --config=pyproject.toml src/ tests/ --check

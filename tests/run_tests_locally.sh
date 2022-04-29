@@ -22,10 +22,10 @@ ${PYTHON} -m coverage run -a -m pytest -svx tests/test_decoders.py
 ${PYTHON} -m coverage run -a -m pytest -svx tests/test_utils.py
 
 # first reader test with PGPORT=5432 is for Postgres 12
-${PYTHON} -m coverage run -a -m pytest -svx --log-cli-level=INFO tests/test_reader.py
+${PYTHON} -m coverage run -a -m pytest -svx tests/test_reader.py
 
 # second reader test with PGPORT=5433 is for Postgres 13
 export PGPORT=5433
-${PYTHON} -m coverage run -a -m pytest -vx --log-cli-level=INFO tests/test_reader.py
+${PYTHON} -m coverage run -a -m pytest -vx tests/test_reader.py
 
 ${PYTHON} -m coverage report -m

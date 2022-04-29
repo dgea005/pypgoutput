@@ -32,6 +32,9 @@ CREATE TABLE public.integration (
 """
 TEST_TABLE_COLUMNS = ["id", "json_data", "amount", "updated_at", "text_data"]
 
+BASE_INSERT_STATEMENT = """INSERT INTO public.integration (id, json_data, amount, updated_at, text_data)
+                        VALUES (10, '{"data": 10}', 10.20, '2020-01-01 00:00:00+00', 'dummy_value');"""
+
 
 logger = logging.getLogger("tests")
 log_handler = logging.StreamHandler()
@@ -59,10 +62,10 @@ def cursor() -> typing.Generator[psycopg2.extras.DictCursor, None, None]:
     connection.close()
 
 
-@pytest.fixture(scope="module")
-def configure_test_db(
+@pytest.fixture(scope="function")
+def configure_db(
     cursor: psycopg2.extras.DictCursor,
-) -> typing.Generator[pypgoutput.LogicalReplicationReader, None, None]:
+) -> None:
     cursor.execute(f"DROP PUBLICATION IF EXISTS {PUBLICATION_NAME};")
     try:
         cursor.execute(f"SELECT pg_drop_replication_slot('{SLOT_NAME}');")
@@ -70,7 +73,13 @@ def configure_test_db(
         logger.warning(f"slot {SLOT_NAME} could not be dropped because it does not exist. {err}")
     cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR ALL TABLES;")
     cursor.execute(f"SELECT * FROM pg_create_logical_replication_slot('{SLOT_NAME}', 'pgoutput');")
-    cdc_reader = pypgoutput.LogicalReplicationReader(
+
+
+@pytest.fixture(scope="function")
+def cdc_reader(
+    cursor: psycopg2.extras.DictCursor, configure_db: None
+) -> typing.Generator[pypgoutput.LogicalReplicationReader, None, None]:
+    reader = pypgoutput.LogicalReplicationReader(
         publication_name=PUBLICATION_NAME,
         slot_name=SLOT_NAME,
         host=HOST,
@@ -84,12 +93,12 @@ def configure_test_db(
     {TEST_TABLE_DDL}
     """
     cursor.execute(query)
-    yield cdc_reader
+    yield reader
     logger.info("Closing test CDC reader")
     try:
-        cdc_reader.stop()
+        reader.stop()
     except Exception as err:
-        logger.warning("Test failed but reader is already closed", err)
+        logger.warning(f"Test failed but reader is already closed: {err}")
 
 
 def test_000_dummy_test(cursor: psycopg2.extras.DictCursor) -> None:
@@ -133,16 +142,28 @@ def validate_message_table_schema(message: pypgoutput.ChangeEvent, replica_ident
     assert message.table_schema.column_definitions[4].optional is True
 
 
-def test_001_insert(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+def test_0000_close_connection(
+    cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
 ) -> None:
-    """with default replica identity"""
-    cdc_reader = configure_test_db
+    cursor.execute(BASE_INSERT_STATEMENT)
+    message = next(cdc_reader)
+    assert message.op == "I"
+    cdc_reader.stop()
+
+    # test the slot is not active
     cursor.execute(
-        """INSERT INTO public.integration (id, json_data, amount, updated_at, text_data)
-        VALUES (10, '{"data": 10}', 10.20, '2020-01-01 00:00:00+00', 'dummy_value');
-        """
+        f"""SELECT slot_name, active
+                        FROM pg_replication_slots
+                        WHERE slot_name = '{SLOT_NAME}'
+                        AND database = '{DATABASE_NAME}';"""
     )
+    result = cursor.fetchone()
+    assert result["active"] is False
+
+
+def test_001_insert(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+    """with default replica identity"""
+    cursor.execute(BASE_INSERT_STATEMENT)
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
     assert cursor.fetchone()["n"] == 1
 
@@ -189,11 +210,10 @@ def test_001_insert(
     assert message.after["text_data"] == "dummy_value"
 
 
-def test_002_update(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
-) -> None:
+def test_002_update(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
-    cdc_reader = configure_test_db
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
     cursor.execute("UPDATE public.integration SET updated_at = '2020-02-01 00:00:00+00' WHERE id = 10;")
     message = next(cdc_reader)
     assert message.op == "U"
@@ -212,11 +232,10 @@ def test_002_update(
 
 
 # TODO: ordering of these tests is dependent on the names and should not be
-def test_003_update_key(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
-) -> None:
+def test_003_update_key(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
-    cdc_reader = configure_test_db
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
     cursor.execute("UPDATE public.integration SET id = 11 WHERE id = 10;")
     message = next(cdc_reader)
     assert message.op == "U"
@@ -231,43 +250,37 @@ def test_003_update_key(
     assert message.after["json_data"] == {"data": 10}
     assert message.after["amount"] == 10.2
     assert message.after["updated_at"] == datetime.strptime(
-        "2020-02-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
+        "2020-01-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
     ).replace(tzinfo=timezone.utc)
     assert message.after["text_data"] == "dummy_value"
 
 
-def test_004_delete(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
-) -> None:
+def test_004_delete(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
-    cdc_reader = configure_test_db
-    cursor.execute("DELETE FROM public.integration WHERE id = 11;")
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
+    cursor.execute("DELETE FROM public.integration WHERE id = 10;")
     message = next(cdc_reader)
     assert message.op == "D"
     validate_message_table_schema(message=message)
     assert message.before is not None
-    assert message.before["id"] == 11
+    assert message.before["id"] == 10
     assert message.after is None
 
 
 def test_005_update_replica_identity_full(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+    cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
 ) -> None:
-    cdc_reader = configure_test_db
     cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
-    cursor.execute(
-        """INSERT INTO public.integration (id, json_data, amount, updated_at, text_data)
-        VALUES (12, '{"data": 10}', 10.20, '2020-01-01 00:00:00+00', 'dummy_value');
-    """
-    )
-    cursor.execute("UPDATE public.integration SET text_data = 'new_text_value' WHERE id = 12;")
-    message = next(cdc_reader)
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
+    cursor.execute("UPDATE public.integration SET text_data = 'new_text_value' WHERE id = 10;")
     message = next(cdc_reader)
     assert message.op == "U"
     validate_message_table_schema(message=message, replica_identity_full=True)
     assert message.before is not None
     assert list(message.before.keys()) == TEST_TABLE_COLUMNS
-    assert message.before["id"] == 12
+    assert message.before["id"] == 10
     assert message.before["json_data"] == {"data": 10}
     assert message.before["amount"] == 10.2
     assert message.before["updated_at"] == datetime.strptime(
@@ -277,7 +290,7 @@ def test_005_update_replica_identity_full(
 
     assert message.after is not None
     assert list(message.after.keys()) == TEST_TABLE_COLUMNS
-    assert message.after["id"] == 12
+    assert message.after["id"] == 10
     assert message.after["json_data"] == {"data": 10}
     assert message.after["amount"] == 10.2
     assert message.after["updated_at"] == datetime.strptime(
@@ -287,32 +300,31 @@ def test_005_update_replica_identity_full(
 
 
 def test_006_delete_replica_identity_full(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
+    cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
 ) -> None:
-    cdc_reader = configure_test_db
-    cursor.execute("DELETE FROM public.integration WHERE id = 12;")
+    cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
+    cursor.execute("DELETE FROM public.integration WHERE id = 10;")
     message = next(cdc_reader)
     assert message.op == "D"
     validate_message_table_schema(message=message, replica_identity_full=True)
     assert message.before is not None
     assert list(message.before.keys()) == TEST_TABLE_COLUMNS
-    assert message.before["id"] == 12
+    assert message.before["id"] == 10
     assert message.before["json_data"] == {"data": 10}
     assert message.before["amount"] == 10.2
     assert message.before["updated_at"] == datetime.strptime(
         "2020-01-01 00:00:00+00".split("+")[0], "%Y-%m-%d %H:%M:%S"
     ).replace(tzinfo=timezone.utc)
-    assert message.before["text_data"] == "new_text_value"
+    assert message.before["text_data"] == "dummy_value"
     assert message.after is None
 
 
-def test_007_truncate(
-    cursor: psycopg2.extras.DictCursor, configure_test_db: typing.Generator[pypgoutput.ChangeEvent, None, None]
-) -> None:
-    cdc_reader = configure_test_db
-    cursor.execute("INSERT INTO public.integration (id, updated_at) VALUES (14, '2020-01-01 00:00:00+00');")
-    insert_msg = next(cdc_reader)
-    assert insert_msg.op == "I"
+def test_007_truncate(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+    cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
+    cursor.execute(BASE_INSERT_STATEMENT)
+    next(cdc_reader)
     cursor.execute("TRUNCATE public.integration;")
     message = next(cdc_reader)
     assert message.op == "T"
@@ -321,7 +333,7 @@ def test_007_truncate(
     assert message.after is None
 
 
-def test_008_extractor_error(cursor: psycopg2.extras.DictCursor) -> None:
+def test_008_extractor_error(cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     pipe_out_conn, pipe_in_conn = multiprocessing.Pipe(duplex=True)
     dsn = psycopg2.extensions.make_dsn(host=HOST, database=DATABASE_NAME, port=PORT, user=USER, password=PASSWORD)
     extractor = pypgoutput.ExtractRaw(

@@ -152,6 +152,7 @@ class LogicalReplicationReader:
         self.extractor.close()
         self.pipe_out_conn.close()
         self.pipe_in_conn.close()
+        self.extractor.close()
 
     def read_raw_extracted(self) -> typing.Generator[ReplicationMessage, None, None]:
         """yields ReplicationMessages from the pipe as written by extractor process"""
@@ -167,7 +168,7 @@ class LogicalReplicationReader:
                 yield item
                 self.pipe_out_conn.send({"id": item.message_id})
             if iter_count % 50 == 0:
-                logger.info(f"pipe poll count: {iter_count}, messages processed: {msg_count}")
+                logger.debug(f"pipe poll count: {iter_count}, messages processed: {msg_count}")
             iter_count += 1
 
     def transform_raw(
@@ -351,6 +352,10 @@ class ExtractRaw(Process):
         self.conn = psycopg2.extras.LogicalReplicationConnection(self.dsn)
         self.cur = psycopg2.extras.ReplicationCursor(self.conn)
 
+    def close(self) -> None:
+        self.cur.close()
+        self.conn.close()
+
     def run(self) -> None:
         replication_options = {"publication_names": self.publication_name, "proto_version": "1"}
         try:
@@ -359,7 +364,7 @@ class ExtractRaw(Process):
             self.cur.create_replication_slot(self.slot_name, output_plugin="pgoutput")
             self.cur.start_replication(slot_name=self.slot_name, decode=False, options=replication_options)
         try:
-            logger.info(f"Starting replication from slot: {self.slot_name}")
+            logger.info(f"Starting replication from slot: '{self.slot_name}'")
             self.cur.consume_stream(self.msg_consumer)
         except Exception as err:
             logger.error(f"Error consuming stream from slot: '{self.slot_name}'. {err}")

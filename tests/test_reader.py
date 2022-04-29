@@ -101,7 +101,7 @@ def cdc_reader(
         logger.warning(f"Test failed but reader is already closed: {err}")
 
 
-def test_000_dummy_test(cursor: psycopg2.extras.DictCursor) -> None:
+def test_dummy_test(cursor: psycopg2.extras.DictCursor) -> None:
     """make sure connection/cursor and DB is operational for tests"""
     cursor.execute("SELECT 1 as n;")
     result = cursor.fetchone()
@@ -142,9 +142,7 @@ def validate_message_table_schema(message: pypgoutput.ChangeEvent, replica_ident
     assert message.table_schema.column_definitions[4].optional is True
 
 
-def test_0000_close_connection(
-    cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
-) -> None:
+def test_close_connection(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     cursor.execute(BASE_INSERT_STATEMENT)
     message = next(cdc_reader)
     assert message.op == "I"
@@ -161,7 +159,7 @@ def test_0000_close_connection(
     assert result["active"] is False
 
 
-def test_001_insert(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+def test_insert(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
     cursor.execute(BASE_INSERT_STATEMENT)
     cursor.execute("SELECT COUNT(*) AS n FROM public.integration;")
@@ -210,7 +208,7 @@ def test_001_insert(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.L
     assert message.after["text_data"] == "dummy_value"
 
 
-def test_002_update(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+def test_update(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
     cursor.execute(BASE_INSERT_STATEMENT)
     next(cdc_reader)
@@ -218,7 +216,6 @@ def test_002_update(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.L
     message = next(cdc_reader)
     assert message.op == "U"
     validate_message_table_schema(message=message)
-    # TODO check what happens with replica identity full?
     assert message.before is None
     assert message.after is not None
     assert list(message.after.keys()) == TEST_TABLE_COLUMNS
@@ -231,8 +228,7 @@ def test_002_update(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.L
     assert message.after["text_data"] == "dummy_value"
 
 
-# TODO: ordering of these tests is dependent on the names and should not be
-def test_003_update_key(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+def test_update_key(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
     cursor.execute(BASE_INSERT_STATEMENT)
     next(cdc_reader)
@@ -255,7 +251,7 @@ def test_003_update_key(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutp
     assert message.after["text_data"] == "dummy_value"
 
 
-def test_004_delete(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+def test_delete(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     """with default replica identity"""
     cursor.execute(BASE_INSERT_STATEMENT)
     next(cdc_reader)
@@ -268,7 +264,7 @@ def test_004_delete(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.L
     assert message.after is None
 
 
-def test_005_update_replica_identity_full(
+def test_update_replica_identity_full(
     cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
 ) -> None:
     cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
@@ -299,7 +295,7 @@ def test_005_update_replica_identity_full(
     assert message.after["text_data"] == "new_text_value"
 
 
-def test_006_delete_replica_identity_full(
+def test_delete_replica_identity_full(
     cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader
 ) -> None:
     cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
@@ -321,19 +317,18 @@ def test_006_delete_replica_identity_full(
     assert message.after is None
 
 
-def test_007_truncate(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
-    cursor.execute("ALTER TABLE public.integration REPLICA IDENTITY FULL;")
+def test_truncate(cursor: psycopg2.extras.DictCursor, cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     cursor.execute(BASE_INSERT_STATEMENT)
     next(cdc_reader)
     cursor.execute("TRUNCATE public.integration;")
     message = next(cdc_reader)
     assert message.op == "T"
-    validate_message_table_schema(message=message, replica_identity_full=True)
+    validate_message_table_schema(message=message, replica_identity_full=False)
     assert message.before is None
     assert message.after is None
 
 
-def test_008_extractor_error(cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
+def test_extractor_error(cdc_reader: pypgoutput.LogicalReplicationReader) -> None:
     pipe_out_conn, pipe_in_conn = multiprocessing.Pipe(duplex=True)
     dsn = psycopg2.extensions.make_dsn(host=HOST, database=DATABASE_NAME, port=PORT, user=USER, password=PASSWORD)
     extractor = pypgoutput.ExtractRaw(
